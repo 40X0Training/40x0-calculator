@@ -23,14 +23,14 @@ const PRESETS = [
   "Incline Press","OHP","Dips","Chin-up",
 ];
 
-// ── Rounding ──────────────────────────────────────────────────────
-const roundHalf    = (n) => Math.round(n * 2) / 2;      // nearest 0.5 — ES1RM & rep max display
-const roundNearest5 = (n) => Math.round(n / 5) * 5;     // nearest 5 — standard plates step loading
-const roundWhole   = (n) => Math.round(n);               // nearest whole — micro plates step loading
+const MAX_COMPLEX_SLOTS = 8;
 
-function roundStep(val, micro) {
-  return micro ? roundWhole(val) : roundNearest5(val);
-}
+// ── Rounding ──────────────────────────────────────────────────────
+const roundHalf     = (n) => Math.round(n * 2) / 2;
+const roundNearest5 = (n) => Math.round(n / 5) * 5;
+const roundWhole    = (n) => Math.round(n);
+const roundDisplay  = (val) => roundHalf(val);
+const roundStep     = (val, micro) => micro ? roundWhole(val) : roundNearest5(val);
 
 function fmt(n) {
   if (n === undefined || n === null || isNaN(n)) return "—";
@@ -50,6 +50,12 @@ function buildLadder(topSetRaw, sets, micro) {
   });
 }
 
+function parseComplex(slots) {
+  return slots
+    .map(s => parseInt(s.trim()))
+    .filter(n => !isNaN(n) && n >= 1 && n <= 15);
+}
+
 // ── Components ────────────────────────────────────────────────────
 function Toggle({ options, value, onChange }) {
   return (
@@ -60,26 +66,6 @@ function Toggle({ options, value, onChange }) {
           {o.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-function DropSelect({ label, value, onChange, options, hint }) {
-  return (
-    <div style={s.field}>
-      {label && (
-        <label style={s.label}>
-          {label}{hint && <span style={s.hint}> {hint}</span>}
-        </label>
-      )}
-      <div style={s.selectWrap}>
-        <select value={value} onChange={e => onChange(Number(e.target.value))} style={s.select}>
-          {options.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <span style={s.selectArrow}>▾</span>
-      </div>
     </div>
   );
 }
@@ -109,7 +95,8 @@ function BigResult({ sublabel, label, value, unit }) {
   );
 }
 
-function Ladder({ steps, unit }) {
+// Standard ladder — fixed-width weight column so numbers align
+function Ladder({ steps, targetReps, unit }) {
   return (
     <div style={s.ladder}>
       {steps.map((w, i) => {
@@ -123,7 +110,10 @@ function Ladder({ steps, unit }) {
             <span style={{ ...s.lSetLabel, ...(isTop ? { color:"#aaa" } : {}) }}>
               Set {i + 1}
             </span>
-            <span style={{ ...s.lWeight, ...(isTop ? { color:"#fff" } : {}) }}>
+            <span style={{ ...s.lReps, ...(isTop ? { color:"#888" } : {}) }}>
+              {targetReps} Reps
+            </span>
+            <span style={{ ...s.lWeightFixed, ...(isTop ? { color:"#fff" } : {}) }}>
               {fmt(w)}<span style={{ ...s.lUnit, ...(isTop ? { color:"#666" } : {}) }}>{unit}</span>
             </span>
             {isTop && <span style={s.lTagTop}>Top Set</span>}
@@ -135,7 +125,26 @@ function Ladder({ steps, unit }) {
   );
 }
 
-function PhaseCard({ phase, esRepMaxRaw, sets, unit, micro }) {
+// Complex per-set list — fixed-width weight column
+function ComplexSetList({ sets, unit }) {
+  return (
+    <div style={s.ladder}>
+      {sets.map((set, i) => (
+        <div key={i} style={{ ...s.ladderRow, ...s.lMid }}>
+          <span style={s.lSetLabel}>Set {i + 1}</span>
+          <span style={s.lReps}>{set.repCount} Reps</span>
+          <span style={s.lWeightFixed}>
+            {fmt(set.weight)}<span style={s.lUnit}>{unit}</span>
+          </span>
+          <span style={s.complexTag}>ES{set.repCount}RM</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Standard phase card
+function PhaseCard({ phase, esRepMaxRaw, sets, targetReps, unit, micro }) {
   const topSetRaw     = esRepMaxRaw * (1 + phase.pct);
   const topSetDisplay = roundHalf(topSetRaw);
   const ladder        = buildLadder(topSetRaw, sets, micro);
@@ -151,42 +160,113 @@ function PhaseCard({ phase, esRepMaxRaw, sets, unit, micro }) {
       <div style={s.phaseTopSetRow}>
         Top set: <strong>{fmt(topSetDisplay)}{unit}</strong>
       </div>
-      <Ladder steps={ladder} unit={unit} />
+      <Ladder steps={ladder} targetReps={targetReps} unit={unit} />
+    </div>
+  );
+}
+
+// Complex phase card
+function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
+  const phasedSets = complexSets.map(set => ({
+    repCount: set.repCount,
+    weight: roundStep(set.weightRaw * (1 + phase.pct), micro),
+  }));
+  return (
+    <div style={s.phaseCard}>
+      <div style={s.phaseTop}>
+        <div>
+          <div style={s.phaseWeek}>{phase.label}</div>
+          <div style={s.phaseTag}>{phase.tag}</div>
+        </div>
+        <div style={s.phasePct}>{phase.pctLabel}</div>
+      </div>
+      <ComplexSetList sets={phasedSets} unit={unit} />
+    </div>
+  );
+}
+
+// Complex input grid
+function ComplexInput({ slots, onChange }) {
+  return (
+    <div style={s.complexWrap}>
+      <label style={s.label}>
+        Rep Scheme <span style={s.hint}>(enter reps per set, left to right)</span>
+      </label>
+      <div style={s.complexGrid}>
+        {slots.map((val, i) => (
+          <div key={i} style={s.complexSlot}>
+            <div style={s.complexSlotLabel}>S{i + 1}</div>
+            <input
+              type="number" min="1" max="15" placeholder="—"
+              value={val}
+              onChange={e => {
+                const next = [...slots];
+                next[i] = e.target.value;
+                onChange(next);
+              }}
+              style={s.complexInput}
+            />
+          </div>
+        ))}
+      </div>
+      <div style={s.complexHintText}>1–15 reps per set · leave unused slots blank</div>
     </div>
   );
 }
 
 // ── Main App ──────────────────────────────────────────────────────
 export default function App() {
-  const [weight,     setWeight]     = useState("");
-  const [topReps,    setTopReps]    = useState(5);
-  const [unit,       setUnit]       = useState("lbs");
-  const [exercise,   setExercise]   = useState("");
-  const [customEx,   setCustomEx]   = useState("");
-  const [showCustom, setShowCustom] = useState(false);
-  const [micro,      setMicro]      = useState(false);
-  const [targetReps, setTargetReps] = useState(10);
-  const [sets,       setSets]       = useState(5);
+  const [weight,       setWeight]       = useState("");
+  const [topReps,      setTopReps]      = useState("");
+  const [unit,         setUnit]         = useState("lbs");
+  const [exercise,     setExercise]     = useState("");
+  const [customEx,     setCustomEx]     = useState("");
+  const [showCustom,   setShowCustom]   = useState(false);
+  const [micro,        setMicro]        = useState(true);
+  const [targetReps,   setTargetReps]   = useState("");
+  const [targetSets,   setTargetSets]   = useState("");
+  const [mode,         setMode]         = useState("standard");
+  const [complexSlots, setComplexSlots] = useState(Array(MAX_COMPLEX_SLOTS).fill(""));
 
-  const repOpts = Array.from({ length:15 }, (_, i) => ({
-    value: i+1, label: `${i+1} rep${i > 0 ? "s" : ""}`,
-  }));
-  const setOpts = Array.from({ length:11 }, (_, i) => ({
-    value: i+2, label: `${i+2} sets`,
-  }));
+  const w  = parseFloat(weight);
+  const r  = parseInt(topReps);
+  const tr = parseInt(targetReps);
+  const ts = parseInt(targetSets);
 
-  const w         = parseFloat(weight);
-  const hasWeight = w && w > 0;
+  const hasWeight  = w && w > 0;
+  const hasReps    = r && r >= 1 && r <= 15;
+  const hasTarget  = tr && tr >= 1 && tr <= 15;
+  const hasSets    = ts && ts >= 2 && ts <= 12;
 
-  const e1rmRaw      = hasWeight ? calcE1RM(w, topReps) : null;
-  const esRepMaxRaw  = e1rmRaw   ? calcRepMax(e1rmRaw, targetReps) : null;
+  const e1rmRaw      = (hasWeight && hasReps) ? calcE1RM(w, r) : null;
+  const e1rmDisplay  = e1rmRaw ? roundDisplay(e1rmRaw) : null;
 
-  const e1rmDisplay     = e1rmRaw     ? roundHalf(e1rmRaw)     : null;
-  const esRepMaxDisplay = esRepMaxRaw ? roundHalf(esRepMaxRaw) : null;
+  const esRepMaxRaw     = (e1rmRaw && hasTarget) ? calcRepMax(e1rmRaw, tr) : null;
+  const esRepMaxDisplay = esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null;
 
-  const ladder = esRepMaxRaw ? buildLadder(esRepMaxRaw, sets, micro) : null;
+  // Only build ladder when both sets AND reps entered
+  const ladder = (esRepMaxRaw && hasSets)
+    ? buildLadder(esRepMaxRaw, ts, micro)
+    : null;
 
-  const exLabel = showCustom ? (customEx || "") : exercise;
+  const complexReps = parseComplex(complexSlots);
+  const hasComplex  = complexReps.length > 0 && e1rmRaw;
+  const complexSets = hasComplex
+    ? complexReps.map(rep => ({
+        repCount:  rep,
+        weightRaw: calcRepMax(e1rmRaw, rep),
+        weight:    roundStep(calcRepMax(e1rmRaw, rep), micro),
+      }))
+    : [];
+
+  const exLabel    = showCustom ? (customEx || "") : exercise;
+  const hasStandardResults = !!esRepMaxDisplay;
+  const hasResults = mode === "standard" ? hasStandardResults : hasComplex;
+
+  // Phase plan needs sets for standard
+  const canShowPhase = mode === "standard"
+    ? (hasStandardResults && hasSets)
+    : hasComplex;
 
   return (
     <div style={s.root}>
@@ -199,9 +279,8 @@ export default function App() {
           <p style={s.tagline}>ES1RM · Target Rep Max · Step Load · Phase Plan</p>
         </header>
 
-        {/* STEP 1 */}
+        {/* ── STEP 1 ── */}
         <Section num="01" title="Estimated 1-Rep Max" show>
-
           <div style={s.rowWrap}>
             <div style={s.field}>
               <label style={s.label}>Unit</label>
@@ -216,7 +295,7 @@ export default function App() {
               <Toggle
                 value={micro ? "yes" : "no"}
                 onChange={v => setMicro(v === "yes")}
-                options={[{ value:"no", label:"No" }, { value:"yes", label:"Yes" }]}
+                options={[{ value:"yes", label:"Yes" }, { value:"no", label:"No" }]}
               />
             </div>
           </div>
@@ -246,28 +325,31 @@ export default function App() {
           </div>
 
           <div style={s.field}>
-            <label style={s.label}>Top Set Weight ({unit})</label>
-            <div style={s.weightRow}>
-              <input type="number" min="1" placeholder="e.g. 100"
-                value={weight} onChange={e => setWeight(e.target.value)}
-                style={s.weightInput} />
+            <label style={s.label}>Reps Performed</label>
+            <div style={s.repsWeightRow}>
+              <input
+                type="number" min="1" max="15" placeholder="5"
+                value={topReps}
+                onChange={e => setTopReps(e.target.value)}
+                style={s.repsInput}
+              />
+              <span style={s.timesSymbol}>×</span>
+              <input
+                type="number" min="1" placeholder="100"
+                value={weight}
+                onChange={e => setWeight(e.target.value)}
+                style={s.weightInput}
+              />
               <span style={s.weightUnitLabel}>{unit}</span>
             </div>
           </div>
-
-          <DropSelect
-            label="Reps Performed"
-            value={topReps}
-            onChange={setTopReps}
-            options={repOpts}
-          />
 
           {e1rmDisplay && (
             <BigResult
               sublabel={
                 exLabel
-                  ? `${exLabel} · ${fmt(w)}${unit} × ${topReps} rep${topReps > 1 ? "s" : ""}`
-                  : `${fmt(w)}${unit} × ${topReps} rep${topReps > 1 ? "s" : ""}`
+                  ? `${exLabel} · ${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
+                  : `${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
               }
               label="Estimated 1-Rep Max"
               value={fmt(e1rmDisplay)}
@@ -276,68 +358,129 @@ export default function App() {
           )}
         </Section>
 
-        {/* STEP 2 */}
-        <Section num="02" title="Target Rep Max" show={!!e1rmDisplay}>
-          <p style={s.desc}>
-            Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — select your target reps.
-          </p>
-          <DropSelect
-            label="Target Reps"
-            value={targetReps}
-            onChange={setTargetReps}
-            options={repOpts}
-          />
-          {esRepMaxDisplay && (
-            <BigResult
-              label={`Estimated ${targetReps}-Rep Max`}
-              value={fmt(esRepMaxDisplay)}
-              unit={unit}
-            />
-          )}
-        </Section>
+        {/* ── STEP 2: New Target Set × Reps ── */}
+        <Section num="02" title="New Target Set × Reps" show={!!e1rmDisplay}>
 
-        {/* STEP 3 */}
-        <Section num="03" title="Step Loading" show={!!esRepMaxDisplay}>
-          <p style={s.desc}>
-            Your ES{targetReps}RM is <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
-            Select your sets to build the loading ladder.
-          </p>
-          <DropSelect
-            label="Number of Sets"
-            value={sets}
-            onChange={setSets}
-            options={setOpts}
-          />
-          {ladder && (
+          <div style={s.field}>
+            <label style={s.label}>Rep Scheme Type</label>
+            <Toggle
+              value={mode}
+              onChange={v => { setMode(v); setTargetReps(""); setTargetSets(""); }}
+              options={[
+                { value:"standard", label:"Standard Reps" },
+                { value:"complex",  label:"Complex Reps"  },
+              ]}
+            />
+          </div>
+
+          {mode === "standard" && (
             <>
-              <div style={s.ladderMeta}>
-                Spread: <strong>{Math.round((STEP_PCT[sets] ?? 0.10) * 100)}%</strong>
-                {" · "}Bottom set: <strong>{fmt(ladder[0])}{unit}</strong>
-                {" · "}Top set: <strong>{fmt(ladder[ladder.length - 1])}{unit}</strong>
+              <p style={s.desc}>
+                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your target sets and reps.
+              </p>
+
+              {/* Sets × Reps inline */}
+              <div style={s.field}>
+                <label style={s.label}>Target Sets × Reps</label>
+                <div style={s.repsWeightRow}>
+                  <input
+                    type="number" min="2" max="12" placeholder="Sets"
+                    value={targetSets}
+                    onChange={e => setTargetSets(e.target.value)}
+                    style={s.repsInput}
+                  />
+                  <span style={s.timesSymbol}>×</span>
+                  <input
+                    type="number" min="1" max="15" placeholder="Reps"
+                    value={targetReps}
+                    onChange={e => setTargetReps(e.target.value)}
+                    style={s.repsInput}
+                  />
+                </div>
               </div>
-              <Ladder steps={ladder} unit={unit} />
+
+              {/* ES rep max result */}
+              {esRepMaxDisplay && (
+                <BigResult
+                  label={`Estimated ${tr}-Rep Max`}
+                  value={fmt(esRepMaxDisplay)}
+                  unit={unit}
+                />
+              )}
+
+              {/* Step loading — appears when both sets + reps entered */}
+              {ladder && (
+                <div style={{ marginTop:20 }}>
+                  <div style={s.ladderMeta}>
+                    <strong>{ts} sets</strong> · Spread: <strong>{Math.round((STEP_PCT[ts] ?? 0.10) * 100)}%</strong>
+                    {" · "}Bottom: <strong>{fmt(ladder[0])}{unit}</strong>
+                    {" · "}Top: <strong>{fmt(ladder[ladder.length - 1])}{unit}</strong>
+                  </div>
+                  <Ladder steps={ladder} targetReps={tr} unit={unit} />
+                </div>
+              )}
+            </>
+          )}
+
+          {mode === "complex" && (
+            <>
+              <p style={s.desc}>
+                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your rep scheme.
+              </p>
+              <ComplexInput slots={complexSlots} onChange={setComplexSlots} />
+              {hasComplex && (
+                <div style={{ ...s.bigResult, marginTop:16 }}>
+                  <div style={s.bigResultLabel}>Rep Scheme Weights</div>
+                  <ComplexSetList sets={complexSets} unit={unit} />
+                </div>
+              )}
             </>
           )}
         </Section>
 
-        {/* STEP 4 */}
-        <Section num="04" title="3-Week Phase Plan" show={!!esRepMaxDisplay}>
-          <p style={s.desc}>
-            Each week adjusts from your ES{targetReps}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
-            Full step loading shown per week.
-          </p>
-          <div style={s.phaseGrid}>
-            {PHASE.map(ph => (
-              <PhaseCard
-                key={ph.week}
-                phase={ph}
-                esRepMaxRaw={esRepMaxRaw}
-                sets={sets}
-                unit={unit}
-                micro={micro}
-              />
-            ))}
-          </div>
+        {/* ── STEP 3: 3-Week Phase Plan ── */}
+        <Section num="03" title="3-Week Phase Plan" show={canShowPhase}>
+          {mode === "standard" && (
+            <>
+              <p style={s.desc}>
+                Each week adjusts from your ES{tr}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
+                Full step loading shown per week.
+              </p>
+              <div style={s.phaseGrid}>
+                {PHASE.map(ph => (
+                  <PhaseCard
+                    key={ph.week}
+                    phase={ph}
+                    esRepMaxRaw={esRepMaxRaw}
+                    sets={ts}
+                    targetReps={tr}
+                    unit={unit}
+                    micro={micro}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {mode === "complex" && hasComplex && (
+            <>
+              <p style={s.desc}>
+                Each week applies phase percentages to each set individually,
+                based on its ES rep max.
+              </p>
+              <div style={s.phaseGrid}>
+                {PHASE.map(ph => (
+                  <ComplexPhaseCard
+                    key={ph.week}
+                    phase={ph}
+                    complexSets={complexSets}
+                    unit={unit}
+                    micro={micro}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </Section>
 
         <div style={s.footer}>40X0 Training · Move Better</div>
@@ -403,18 +546,6 @@ const s = {
   },
   toggleOn: { background:"#1A1A1A", borderColor:"#1A1A1A", color:"#fff" },
 
-  selectWrap: { position:"relative" },
-  select: {
-    width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
-    borderRadius:10, color:"#1A1A1A", fontSize:16,
-    padding:"13px 40px 13px 14px",
-    fontFamily:"'Barlow',sans-serif", fontWeight:500, cursor:"pointer",
-  },
-  selectArrow: {
-    position:"absolute", right:14, top:"50%",
-    transform:"translateY(-50%)", color:"#bbb", fontSize:14, pointerEvents:"none",
-  },
-
   exGrid: { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:5 },
   exBtn: {
     background:"#F8F8F8", border:"1.5px solid #E8E8E8",
@@ -424,9 +555,19 @@ const s = {
   },
   exBtnOn: { background:"#1A1A1A", borderColor:"#1A1A1A", color:"#fff" },
 
-  weightRow: { display:"flex", alignItems:"center", gap:10 },
+  repsWeightRow: { display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" },
+  repsInput: {
+    width:140, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:10, color:"#1A1A1A",
+    fontSize:40, fontFamily:"'Bebas Neue',sans-serif",
+    letterSpacing:2, padding:"10px 14px", textAlign:"center",
+  },
+  timesSymbol: {
+    fontFamily:"'Bebas Neue',sans-serif",
+    fontSize:32, color:"#ccc", letterSpacing:1, flexShrink:0,
+  },
   weightInput: {
-    width:170, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    width:150, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A",
     fontSize:40, fontFamily:"'Bebas Neue',sans-serif",
     letterSpacing:2, padding:"10px 14px",
@@ -434,6 +575,7 @@ const s = {
   weightUnitLabel: {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc", letterSpacing:2,
   },
+
   textInput: {
     width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A", fontSize:15,
@@ -447,7 +589,7 @@ const s = {
   bigResultSub: { fontSize:11, color:"#bbb", letterSpacing:1, marginBottom:4 },
   bigResultLabel: {
     fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:12, letterSpacing:5, color:"#bbb", marginBottom:4,
+    fontSize:12, letterSpacing:5, color:"#bbb", marginBottom:12,
   },
   bigResultNum: {
     fontFamily:"'Bebas Neue',sans-serif",
@@ -462,27 +604,55 @@ const s = {
   ladder: { borderRadius:12, overflow:"hidden", border:"1.5px solid #E8E8E8" },
   ladderRow: {
     display:"flex", alignItems:"center",
-    padding:"14px 16px", borderBottom:"1px solid #F0F0F0", gap:12,
+    padding:"13px 16px", borderBottom:"1px solid #F0F0F0", gap:8,
   },
   lTop: { background:"#1A1A1A", borderBottom:"none" },
   lMid: { background:"#FAFAFA" },
   lBot: { background:"#F0F0F0" },
   lSetLabel: {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#bbb", width:52, flexShrink:0, fontWeight:700,
+    color:"#bbb", width:46, flexShrink:0, fontWeight:700,
   },
-  lWeight: {
-    fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:1, color:"#1A1A1A", flex:1,
+  lReps: {
+    fontSize:10, letterSpacing:2, textTransform:"uppercase",
+    color:"#bbb", width:60, flexShrink:0, fontWeight:700,
   },
-  lUnit: { fontSize:14, marginLeft:2, color:"#bbb" },
+  // Fixed width so all numbers left-align to same position
+  lWeightFixed: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
+    letterSpacing:1, color:"#1A1A1A",
+    width:110, flexShrink:0,
+  },
+  lUnit: { fontSize:13, marginLeft:2, color:"#bbb" },
   lTagTop: {
     fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
-    color:"#888", background:"#333", padding:"3px 8px", borderRadius:4, fontWeight:700,
+    color:"#888", background:"#333", padding:"3px 8px",
+    borderRadius:4, fontWeight:700, flexShrink:0, marginLeft:"auto",
   },
   lTagBot: {
     fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
-    color:"#666", background:"#E0E0E0", padding:"3px 8px", borderRadius:4, fontWeight:700,
+    color:"#666", background:"#E0E0E0", padding:"3px 8px",
+    borderRadius:4, fontWeight:700, flexShrink:0, marginLeft:"auto",
   },
+  complexTag: {
+    fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
+    color:"#888", background:"#E8E8E8", padding:"3px 8px",
+    borderRadius:4, fontWeight:700, flexShrink:0, marginLeft:"auto",
+  },
+
+  complexWrap: { marginBottom:4 },
+  complexGrid: { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:8 },
+  complexSlot: { display:"flex", flexDirection:"column", alignItems:"center", gap:4 },
+  complexSlotLabel: {
+    fontSize:9, letterSpacing:2, textTransform:"uppercase", color:"#ccc", fontWeight:700,
+  },
+  complexInput: {
+    width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:8, color:"#1A1A1A", fontSize:20,
+    fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
+    padding:"10px 4px", textAlign:"center",
+  },
+  complexHintText: { fontSize:11, color:"#ccc", fontStyle:"italic", letterSpacing:0.3 },
 
   phaseGrid: { display:"flex", flexDirection:"column", gap:16 },
   phaseCard: {
@@ -494,7 +664,10 @@ const s = {
   phaseWeek: {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:26, letterSpacing:2, color:"#1A1A1A",
   },
-  phaseTag: { fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#bbb", fontWeight:700, marginTop:2 },
+  phaseTag: {
+    fontSize:10, letterSpacing:2, textTransform:"uppercase",
+    color:"#bbb", fontWeight:700, marginTop:2,
+  },
   phasePct: { fontSize:12, color:"#999", fontStyle:"italic", textAlign:"right" },
   phaseTopSetRow: {
     fontSize:13, color:"#666", marginBottom:14,
