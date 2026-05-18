@@ -13,9 +13,9 @@ const STEP_PCT = {
 };
 
 const PHASE = [
-  { week:1, label:"Week 1", defaultPct:-0.05,  tag:"Building In",  },
-  { week:2, label:"Week 2", defaultPct:+0.025, tag:"Coordinating", },
-  { week:3, label:"Week 3", defaultPct:+0.05,  tag:"Expressing",   },
+  { week:1, label:"Week 1", defaultPct:-0.05,  tag:"Building In"  },
+  { week:2, label:"Week 2", defaultPct:+0.025, tag:"Coordinating" },
+  { week:3, label:"Week 3", defaultPct:+0.05,  tag:"Expressing"   },
 ];
 
 const PRESETS = [
@@ -31,9 +31,7 @@ const roundNearest5 = (n) => Math.round(n / 5) * 5;
 const roundWhole    = (n) => Math.round(n);
 const roundDisplay  = (val) => roundHalf(val);
 const roundStep     = (val, micro) => micro ? roundWhole(val) : roundNearest5(val);
-
-// Round percentage to nearest 0.5
-const roundPct = (n) => Math.round(n * 200) / 200;
+const roundPct      = (n) => Math.round(n * 200) / 200;
 
 function fmt(n) {
   if (n === undefined || n === null || isNaN(n)) return "—";
@@ -66,7 +64,6 @@ function parseComplex(slots) {
     .filter(n => !isNaN(n) && n >= 1 && n <= 15);
 }
 
-// ── Warm-up calculator ────────────────────────────────────────────
 function buildWarmup(bottomSetWeight, micro) {
   return [
     { reps:6, pct:0.50 },
@@ -78,6 +75,15 @@ function buildWarmup(bottomSetWeight, micro) {
     weight: roundStep(bottomSetWeight * wu.pct, micro),
   }));
 }
+
+// ── Shared column widths for alignment ────────────────────────────
+// SET label | REPS label | WEIGHT (fixed) | TAG
+// These must match between warm-up rows and working set rows
+const COL = {
+  set:    46,  // "SET 1"
+  reps:   72,  // "6 REPS"
+  weight: 120, // the number — fixed width so all weights left-align
+};
 
 // ── Components ────────────────────────────────────────────────────
 function Toggle({ options, value, onChange }) {
@@ -118,7 +124,7 @@ function BigResult({ sublabel, label, value, unit }) {
   );
 }
 
-// Warm-up block
+// Warm-up block — uses same column widths as working ladder
 function WarmupBlock({ bottomSetWeight, unit, micro }) {
   const [open, setOpen] = useState(false);
   const warmup = buildWarmup(bottomSetWeight, micro);
@@ -134,9 +140,9 @@ function WarmupBlock({ bottomSetWeight, unit, micro }) {
           <div style={s.warmupHeader}>WARM-UP SETS</div>
           {warmup.map(wu => (
             <div key={wu.setNum} style={s.warmupRow}>
-              <span style={s.warmupSetLabel}>Set {wu.setNum}</span>
-              <span style={s.warmupReps}>{wu.reps} Reps</span>
-              <span style={s.warmupWeight}>
+              <span style={{...s.warmupSetLabel, width:COL.set}}>Set {wu.setNum}</span>
+              <span style={{...s.warmupReps, width:COL.reps}}>{wu.reps} Reps</span>
+              <span style={{...s.warmupWeight, width:COL.weight}}>
                 {fmt(wu.weight)}<span style={s.warmupUnit}>{unit}</span>
               </span>
             </div>
@@ -150,7 +156,7 @@ function WarmupBlock({ bottomSetWeight, unit, micro }) {
   );
 }
 
-// Standard ladder
+// Standard ladder — same column widths as warm-up
 function Ladder({ steps, targetReps, unit }) {
   return (
     <div style={s.ladder}>
@@ -162,14 +168,14 @@ function Ladder({ steps, targetReps, unit }) {
             ...s.ladderRow,
             ...(isTop ? s.lTop : isBot ? s.lBot : s.lMid),
           }}>
-            <span style={{ ...s.lSetLabel, ...(isTop ? { color:"#aaa" } : {}) }}>
+            <span style={{...s.lSetLabel, width:COL.set, ...(isTop?{color:"#aaa"}:{})}}>
               Set {i + 1}
             </span>
-            <span style={{ ...s.lReps, ...(isTop ? { color:"#888" } : {}) }}>
+            <span style={{...s.lReps, width:COL.reps, ...(isTop?{color:"#888"}:{})}}>
               {targetReps} Reps
             </span>
-            <span style={{ ...s.lWeightFixed, ...(isTop ? { color:"#fff" } : {}) }}>
-              {fmt(w)}<span style={{ ...s.lUnit, ...(isTop ? { color:"#666" } : {}) }}>{unit}</span>
+            <span style={{...s.lWeightFixed, width:COL.weight, ...(isTop?{color:"#fff"}:{})}}>
+              {fmt(w)}<span style={{...s.lUnit, ...(isTop?{color:"#666"}:{})}}>{unit}</span>
             </span>
             {isTop && <span style={s.lTagTop}>Top Set</span>}
             {isBot && <span style={s.lTagBot}>Start</span>}
@@ -180,15 +186,15 @@ function Ladder({ steps, targetReps, unit }) {
   );
 }
 
-// Complex per-set list
+// Complex per-set list — same column widths
 function ComplexSetList({ sets, unit }) {
   return (
     <div style={s.ladder}>
       {sets.map((set, i) => (
-        <div key={i} style={{ ...s.ladderRow, ...s.lMid }}>
-          <span style={s.lSetLabel}>Set {i + 1}</span>
-          <span style={s.lReps}>{set.repCount} Reps</span>
-          <span style={s.lWeightFixed}>
+        <div key={i} style={{...s.ladderRow, ...s.lMid}}>
+          <span style={{...s.lSetLabel, width:COL.set}}>Set {i + 1}</span>
+          <span style={{...s.lReps, width:COL.reps}}>{set.repCount} Reps</span>
+          <span style={{...s.lWeightFixed, width:COL.weight}}>
             {fmt(set.weight)}<span style={s.lUnit}>{unit}</span>
           </span>
           <span style={s.complexTag}>ES{set.repCount}RM</span>
@@ -198,17 +204,14 @@ function ComplexSetList({ sets, unit }) {
   );
 }
 
-// Pct adjuster — [−] [value] [+]
+// Pct adjuster
 function PctAdjuster({ value, onChange }) {
-  const step = 0.005; // 0.5%
-  const dec = () => onChange(roundPct(value - step));
-  const inc = () => onChange(roundPct(value + step));
-
+  const step = 0.005;
   return (
     <div style={s.pctAdjRow}>
-      <button onClick={dec} style={s.pctBtn}>−</button>
+      <button onClick={() => onChange(roundPct(value - step))} style={s.pctBtn}>−</button>
       <div style={s.pctDisplay}>{fmtPct(value)}</div>
-      <button onClick={inc} style={s.pctBtn}>+</button>
+      <button onClick={() => onChange(roundPct(value + step))} style={s.pctBtn}>+</button>
     </div>
   );
 }
@@ -234,9 +237,7 @@ function PhaseCard({ phase, esRepMaxRaw, defaultSets, targetReps, unit, micro })
           <div style={s.phaseTag}>{phase.tag}</div>
         </div>
         <div style={s.phaseTopRight}>
-          {/* % adjuster */}
           <PctAdjuster value={pct} onChange={setPct} />
-          {/* Sets override */}
           <input
             type="number" min="2" max="12"
             placeholder={`${defaultSets} sets`}
@@ -247,6 +248,7 @@ function PhaseCard({ phase, esRepMaxRaw, defaultSets, targetReps, unit, micro })
         </div>
       </div>
 
+      {/* Top set info — left aligned */}
       <div style={s.phaseTopSetRow}>
         Top set: <strong>{fmt(topSetDisplay)}{unit}</strong>
         {" · "}{activeSets} sets
@@ -282,7 +284,6 @@ function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
           <PctAdjuster value={pct} onChange={setPct} />
         </div>
       </div>
-
       <WarmupBlock bottomSetWeight={bottomSet} unit={unit} micro={micro} />
       <ComplexSetList sets={phasedSets} unit={unit} />
     </div>
@@ -489,7 +490,7 @@ export default function App() {
                       type="number" min="2" max="12" placeholder="Sets"
                       value={targetSets}
                       onChange={e => setTargetSets(e.target.value)}
-                      style={s.bigInput}
+                      style={s.step2Input}
                     />
                     <span style={s.inputLabel}>Sets</span>
                   </div>
@@ -499,7 +500,7 @@ export default function App() {
                       type="number" min="1" max="15" placeholder="Reps"
                       value={targetReps}
                       onChange={e => setTargetReps(e.target.value)}
-                      style={s.bigInput}
+                      style={s.step2Input}
                     />
                     <span style={s.inputLabel}>Reps</span>
                   </div>
@@ -662,12 +663,23 @@ const s = {
 
   inputRow: { display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" },
   inputGroup: { display:"flex", alignItems:"center", gap:6, flexShrink:0 },
+
+  // Step 1 big inputs
   bigInput: {
     width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A",
     fontSize:38, fontFamily:"'Bebas Neue',sans-serif",
     letterSpacing:2, padding:"10px 12px", textAlign:"center", flexShrink:0,
   },
+
+  // Step 2 inputs — smaller font so placeholder fits
+  step2Input: {
+    width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:10, color:"#1A1A1A",
+    fontSize:22, fontFamily:"'Bebas Neue',sans-serif",
+    letterSpacing:1, padding:"14px 12px", textAlign:"center", flexShrink:0,
+  },
+
   inputLabel: {
     fontFamily:"'Bebas Neue',sans-serif",
     fontSize:18, color:"#bbb", letterSpacing:2, flexShrink:0,
@@ -705,22 +717,22 @@ const s = {
   ladder: { borderRadius:12, overflow:"hidden", border:"1.5px solid #E8E8E8" },
   ladderRow: {
     display:"flex", alignItems:"center",
-    padding:"13px 16px", borderBottom:"1px solid #F0F0F0", gap:8,
+    padding:"13px 16px", borderBottom:"1px solid #F0F0F0", gap:0,
   },
   lTop: { background:"#1A1A1A", borderBottom:"none" },
   lMid: { background:"#FAFAFA" },
   lBot: { background:"#F0F0F0" },
   lSetLabel: {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#bbb", width:46, flexShrink:0, fontWeight:700,
+    color:"#bbb", flexShrink:0, fontWeight:700,
   },
   lReps: {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#bbb", width:60, flexShrink:0, fontWeight:700,
+    color:"#bbb", flexShrink:0, fontWeight:700,
   },
   lWeightFixed: {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
-    letterSpacing:1, color:"#1A1A1A", width:110, flexShrink:0,
+    letterSpacing:1, color:"#1A1A1A", flexShrink:0,
   },
   lUnit: { fontSize:13, marginLeft:2, color:"#bbb" },
   lTagTop: {
@@ -773,10 +785,7 @@ const s = {
     color:"#bbb", fontWeight:700, marginTop:2,
   },
 
-  // Pct adjuster
-  pctAdjRow: {
-    display:"flex", alignItems:"center", gap:4,
-  },
+  pctAdjRow: { display:"flex", alignItems:"center", gap:4 },
   pctBtn: {
     width:28, height:28, background:"#E8E8E8", border:"1.5px solid #D8D8D8",
     borderRadius:6, fontSize:16, color:"#555", fontWeight:700,
@@ -795,9 +804,13 @@ const s = {
     padding:"5px 8px", fontFamily:"'Barlow',sans-serif",
     textAlign:"center", fontWeight:500,
   },
+
+  // Top set info — left aligned
   phaseTopSetRow: {
     fontSize:13, color:"#666", marginBottom:12,
-    padding:"8px 12px", background:"#EFEFEF", borderRadius:8, display:"inline-block",
+    padding:"8px 12px", background:"#EFEFEF",
+    borderRadius:8, display:"inline-block",
+    alignSelf:"flex-start",
   },
 
   // Warm-up
@@ -822,19 +835,19 @@ const s = {
   },
   warmupRow: {
     display:"flex", alignItems:"center",
-    padding:"12px 16px", borderBottom:"1px solid #444", gap:8,
+    padding:"12px 16px", borderBottom:"1px solid #444", gap:0,
   },
   warmupSetLabel: {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#888", width:46, flexShrink:0, fontWeight:700,
+    color:"#888", flexShrink:0, fontWeight:700,
   },
   warmupReps: {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#888", width:60, flexShrink:0, fontWeight:700,
+    color:"#888", flexShrink:0, fontWeight:700,
   },
   warmupWeight: {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
-    letterSpacing:1, color:"#F0F0F0", flex:1,
+    letterSpacing:1, color:"#F0F0F0", flexShrink:0,
   },
   warmupUnit: { fontSize:13, marginLeft:2, color:"#666" },
   warmupDisclaimer: {
