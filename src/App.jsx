@@ -28,14 +28,14 @@ const MAX_COMPLEX_SLOTS = 8;
 
 // ── Limiting Lift System ─────────────────────────────────────────
 const LIFT_DEFS = [
-  { key:"bench",    label:"Bench Press",        group:"upper", motherKey:null,     targetRatio:null },
-  { key:"ohp",      label:"Overhead Press",      group:"upper", motherKey:"bench",  targetRatio:0.72 },
-  { key:"incline",  label:"Incline Press",        group:"upper", motherKey:"bench",  targetRatio:0.91 },
-  { key:"dips",     label:"Dips / Decline Press", group:"upper", motherKey:"bench",  targetRatio:1.17 },
-  { key:"chinup",   label:"Chin-up",              group:"upper", motherKey:"bench",  targetRatio:0.87 },
-  { key:"squat",    label:"Back Squat",           group:"lower", motherKey:null,     targetRatio:null },
-  { key:"deadlift", label:"Deadlift",             group:"lower", motherKey:"squat",  targetRatio:1.25 },
-  { key:"frontsq",  label:"Front Squat",          group:"lower", motherKey:"squat",  targetRatio:0.85 },
+  { key:"bench",    label:"Bench Press",        group:"upper", motherKey:null,    targetRatio:null },
+  { key:"ohp",      label:"Overhead Press",      group:"upper", motherKey:"bench", targetRatio:0.72 },
+  { key:"incline",  label:"Incline Press",        group:"upper", motherKey:"bench", targetRatio:0.91 },
+  { key:"dips",     label:"Dips / Decline Press", group:"upper", motherKey:"bench", targetRatio:1.17 },
+  { key:"chinup",   label:"Chin-up",              group:"upper", motherKey:"bench", targetRatio:0.87 },
+  { key:"squat",    label:"Back Squat",           group:"lower", motherKey:null,    targetRatio:null },
+  { key:"deadlift", label:"Deadlift",             group:"lower", motherKey:"squat", targetRatio:1.25 },
+  { key:"frontsq",  label:"Front Squat",          group:"lower", motherKey:"squat", targetRatio:0.85 },
 ];
 
 function calcLimitingLifts(inputs) {
@@ -56,7 +56,6 @@ function calcLimitingLifts(inputs) {
     const gap = (actualRatio !== null) ? actualRatio - def.targetRatio : null;
     return { ...def, e1rm, actualRatio, gap };
   });
-
   for (const group of ["upper","lower"]) {
     const dependents = results.filter(r => r.group === group && r.motherKey !== null && r.gap !== null);
     if (dependents.length === 0) continue;
@@ -257,8 +256,8 @@ function PctAdjuster({ value, onChange }) {
 function PhaseCard({ phase, esRepMaxRaw, defaultSets, targetReps, unit, micro }) {
   const [weekSetsInput, setWeekSetsInput] = useState("");
   const [pct, setPct] = useState(phase.defaultPct);
-  const overrideSets = parseInt(weekSetsInput);
-  const activeSets   = (overrideSets >= 2 && overrideSets <= 12) ? overrideSets : defaultSets;
+  const overrideSets  = parseInt(weekSetsInput);
+  const activeSets    = (overrideSets >= 2 && overrideSets <= 12) ? overrideSets : defaultSets;
   const topSetRaw     = esRepMaxRaw * (1 + pct);
   const topSetDisplay = roundHalf(topSetRaw);
   const ladder        = buildLadder(topSetRaw, activeSets, micro);
@@ -384,7 +383,7 @@ function LimitingLiftResults({ results, unit }) {
         <div style={s.llGroupHeader}>
           <span style={s.llGroupLabel}>{groupLabel}</span>
           {limiting && (
-            <span style={s.llLimitingFlag}>⚡ Limiting: {limiting.label}</span>
+            <span style={s.llLimitingFlag}>Limiting: {limiting.label}</span>
           )}
         </div>
         <div style={s.llResultsTable}>
@@ -401,28 +400,26 @@ function LimitingLiftResults({ results, unit }) {
             const isLimiting = !!lift.isLimiting;
             const gap        = lift.gap;
             const gapColor   = isMother ? "#bbb"
-              : gap === null   ? "#bbb"
-              : gap >= 0       ? "#4CAF50"
-              : gap > -0.05    ? "#FF9800"
-              : "#F44336";
+              : gap === null ? "#bbb"
+              : gap >= 0     ? "#4CAF50"
+              : gap > -0.05  ? "#FF9800"
+              : "#C0392B";
             return (
               <div key={lift.key} style={{
                 ...s.llResultRow,
                 ...(isLimiting ? s.llResultLimiting : {}),
                 ...(isMother   ? s.llResultMother   : {}),
               }}>
-                <span style={s.llColLift}>
+                <span style={{...s.llColLift, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
                   {lift.label}
-                  {isMother   && <span style={s.llMotherDot}>●</span>}
-                  {isLimiting && <span style={s.llLimitingDot}>⚡</span>}
                 </span>
-                <span style={s.llColE1rm}>
+                <span style={{...s.llColE1rm, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
                   {fmt(roundHalf(lift.e1rm))}<span style={s.llSmallUnit}>{unit}</span>
                 </span>
-                <span style={{ ...s.llColActual, color: isMother ? "#bbb" : "#1A1A1A" }}>
+                <span style={{ ...s.llColActual, color: isMother ? "#bbb" : isLimiting ? "#C0392B" : "#1A1A1A" }}>
                   {isMother ? "—" : fmtRatioPct(lift.actualRatio)}
                 </span>
-                <span style={{ ...s.llColTarget, color:"#bbb" }}>
+                <span style={{ ...s.llColTarget, color: isLimiting ? "#C0392B" : "#bbb" }}>
                   {isMother ? "—" : fmtRatioPct(lift.targetRatio)}
                 </span>
                 <span style={{ ...s.llColGap, color: gapColor }}>
@@ -445,7 +442,85 @@ function LimitingLiftResults({ results, unit }) {
       <div style={s.llLegend}>
         <span style={{ color:"#4CAF50" }}>■</span> At or above target &nbsp;&nbsp;
         <span style={{ color:"#FF9800" }}>■</span> Within 5% below &nbsp;&nbsp;
-        <span style={{ color:"#F44336" }}>■</span> More than 5% below
+        <span style={{ color:"#C0392B" }}>■</span> More than 5% below
+      </div>
+    </div>
+  );
+}
+
+// ── Email Modal ───────────────────────────────────────────────────
+function EmailModal({ onClose, emailData }) {
+  const [email,   setEmail]   = useState("");
+  const [status,  setStatus]  = useState("idle"); // idle | sending | sent | error
+
+  const handleSend = async () => {
+    if (!email || !email.includes("@")) return;
+    setStatus("sending");
+    try {
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: email, data: emailData }),
+      });
+      if (res.ok) {
+        setStatus("sent");
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div style={s.modalOverlay} onClick={onClose}>
+      <div style={s.modalBox} onClick={e => e.stopPropagation()}>
+        {/* Close button */}
+        <button onClick={onClose} style={s.modalClose}>✕</button>
+
+        {/* Icon */}
+        <div style={s.modalIcon}>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2" fill="none"/>
+            <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2" fill="none"/>
+          </svg>
+        </div>
+
+        {status === "sent" ? (
+          <>
+            <div style={s.modalTitle}>Results Sent!</div>
+            <div style={s.modalDesc}>Check your inbox at <strong>{email}</strong></div>
+            <button onClick={onClose} style={s.modalSendBtn}>Done</button>
+          </>
+        ) : (
+          <>
+            <div style={s.modalTitle}>Email Me My Results</div>
+            <div style={s.modalDesc}>
+              We'll send your ES1RM, step loading, phase plan, and limiting lift analysis to your inbox.
+            </div>
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={s.modalInput}
+              autoFocus
+            />
+            {status === "error" && (
+              <div style={s.modalError}>Something went wrong — please try again.</div>
+            )}
+            <button
+              onClick={handleSend}
+              disabled={status === "sending" || !email.includes("@")}
+              style={{
+                ...s.modalSendBtn,
+                opacity: (status === "sending" || !email.includes("@")) ? 0.5 : 1,
+              }}
+            >
+              {status === "sending" ? "Sending…" : "Send Results"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -455,10 +530,10 @@ function LimitingLiftResults({ results, unit }) {
 const EMPTY_LIFT = { reps: "", weight: "" };
 
 export default function App() {
-  // Tab state
-  const [activeTab, setActiveTab] = useState("planner");
+  const [activeTab,    setActiveTab]    = useState("planner");
+  const [showModal,    setShowModal]    = useState(false);
 
-  // 1RM Planner state
+  // Planner state
   const [weight,       setWeight]       = useState("");
   const [topReps,      setTopReps]      = useState("");
   const [unit,         setUnit]         = useState("lbs");
@@ -533,6 +608,41 @@ export default function App() {
   const hasAnyLL  = hasUpperLL || hasLowerLL;
   const llResults = hasAnyLL ? calcLimitingLifts(llParsed) : null;
 
+  // Show floating button once ES1RM is calculated
+  const showEmailBtn = !!e1rmDisplay || hasAnyLL;
+
+  // Build email data payload
+  const buildEmailData = () => {
+    const weeks = PHASE.map(ph => {
+      const topSetRaw = esRepMaxRaw ? esRepMaxRaw * (1 + ph.defaultPct) : null;
+      return {
+        label:    ph.label,
+        tag:      ph.tag,
+        pctLabel: ph.defaultPct >= 0
+          ? `+${(ph.defaultPct * 100).toFixed(1)}% vs ES rep max`
+          : `${(ph.defaultPct * 100).toFixed(1)}% vs ES rep max`,
+        topSet: topSetRaw ? roundHalf(topSetRaw) : null,
+        sets:   ts || 0,
+        reps:   tr || 0,
+        ladder: (topSetRaw && hasSets) ? buildLadder(topSetRaw, ts, micro) : [],
+      };
+    });
+
+    return {
+      exercise:   exLabel || null,
+      weight:     w || null,
+      topReps:    r || null,
+      unit,
+      micro,
+      e1rm:       e1rmDisplay,
+      esRepMax:   esRepMaxDisplay,
+      targetReps: tr || null,
+      ladder:     ladder || [],
+      weeks:      canShowPhase && mode === "standard" ? weeks : [],
+      llResults:  llResults || [],
+    };
+  };
+
   return (
     <div style={s.root}>
       <div style={s.wrap}>
@@ -541,7 +651,9 @@ export default function App() {
         <header style={s.header}>
           <div style={s.brand}>40X0 Training</div>
           <h1 style={s.title}>
-            {activeTab === "planner" ? <>1RM &amp; Load<br/>Planner</> : <>Limiting Lift<br/>Calculator</>}
+            {activeTab === "planner"
+              ? <>1RM &amp; Load<br/>Planner</>
+              : <>Limiting Lift<br/>Calculator</>}
           </h1>
           <p style={s.tagline}>
             {activeTab === "planner"
@@ -566,19 +678,15 @@ export default function App() {
           </button>
         </div>
 
-        {/* ══════════════════════════════════════════
-            TAB 1 — 1RM & LOAD PLANNER
-        ══════════════════════════════════════════ */}
+        {/* ══ TAB 1 ══ */}
         {activeTab === "planner" && (
           <>
-            {/* ── STEP 1 ── */}
             <Section num="01" title="Find Your Estimated 1-Rep Max" show>
               <div style={s.rowWrap}>
                 <div style={s.field}>
                   <label style={s.label}>Unit</label>
                   <Toggle
-                    value={unit}
-                    onChange={setUnit}
+                    value={unit} onChange={setUnit}
                     options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
                   />
                 </div>
@@ -657,13 +765,11 @@ export default function App() {
               )}
             </Section>
 
-            {/* ── STEP 2 ── */}
             <Section num="02" title="New Mesocycle Sets × Reps" show={!!e1rmDisplay}>
               <div style={s.field}>
                 <label style={s.label}>Rep Scheme Type</label>
                 <Toggle
-                  value={mode}
-                  onChange={setMode}
+                  value={mode} onChange={setMode}
                   options={[
                     { value:"standard", label:"Standard Reps" },
                     { value:"complex",  label:"Complex Reps"  },
@@ -700,7 +806,6 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-
                   {esRepMaxDisplay && (
                     <BigResult
                       label={`Estimated ${tr}-Rep Max`}
@@ -708,7 +813,6 @@ export default function App() {
                       unit={unit}
                     />
                   )}
-
                   {ladder && (
                     <div style={{ marginTop:20 }}>
                       <div style={s.ladderMeta}>
@@ -738,7 +842,6 @@ export default function App() {
               )}
             </Section>
 
-            {/* ── STEP 3 ── */}
             <Section num="03" title="3-Week Phase Plan" show={canShowPhase}>
               {mode === "standard" && (
                 <>
@@ -749,13 +852,10 @@ export default function App() {
                   <div style={s.phaseGrid}>
                     {PHASE.map(ph => (
                       <PhaseCard
-                        key={ph.week}
-                        phase={ph}
+                        key={ph.week} phase={ph}
                         esRepMaxRaw={esRepMaxRaw}
-                        defaultSets={ts}
-                        targetReps={tr}
-                        unit={unit}
-                        micro={micro}
+                        defaultSets={ts} targetReps={tr}
+                        unit={unit} micro={micro}
                       />
                     ))}
                   </div>
@@ -765,16 +865,13 @@ export default function App() {
                 <>
                   <p style={s.desc}>
                     Each week applies phase percentages to each set individually.
-                    Adjust percentages per week as needed.
                   </p>
                   <div style={s.phaseGrid}>
                     {PHASE.map(ph => (
                       <ComplexPhaseCard
-                        key={ph.week}
-                        phase={ph}
+                        key={ph.week} phase={ph}
                         complexSets={complexSets}
-                        unit={unit}
-                        micro={micro}
+                        unit={unit} micro={micro}
                       />
                     ))}
                   </div>
@@ -784,9 +881,7 @@ export default function App() {
           </>
         )}
 
-        {/* ══════════════════════════════════════════
-            TAB 2 — LIMITING LIFT CALCULATOR
-        ══════════════════════════════════════════ */}
+        {/* ══ TAB 2 ══ */}
         {activeTab === "limiting" && (
           <>
             <Section num="01" title="Enter Lift Data" show>
@@ -794,46 +889,35 @@ export default function App() {
                 <div style={s.field}>
                   <label style={s.label}>Unit</label>
                   <Toggle
-                    value={llUnit}
-                    onChange={setLlUnit}
+                    value={llUnit} onChange={setLlUnit}
                     options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
                   />
                 </div>
               </div>
-
               <p style={s.desc}>
                 Enter reps × weight for each lift. The limiting lift per group is the one
                 with the largest negative gap from its target ratio relative to the mother lift.
               </p>
-
-              {/* Upper Body */}
               <div style={s.llBlock}>
                 <div style={s.llBlockHeader}>Upper Body</div>
                 {LIFT_DEFS.filter(d => d.group === "upper").map(def => (
-                  <LiftInputRow
-                    key={def.key}
-                    def={def}
+                  <LiftInputRow key={def.key} def={def}
                     value={llInputs[def.key]}
                     onChange={val => setLLInput(def.key, val)}
                     unit={llUnit}
                   />
                 ))}
               </div>
-
-              {/* Lower Body */}
               <div style={{ ...s.llBlock, marginTop:20 }}>
                 <div style={s.llBlockHeader}>Lower Body</div>
                 {LIFT_DEFS.filter(d => d.group === "lower").map(def => (
-                  <LiftInputRow
-                    key={def.key}
-                    def={def}
+                  <LiftInputRow key={def.key} def={def}
                     value={llInputs[def.key]}
                     onChange={val => setLLInput(def.key, val)}
                     unit={llUnit}
                   />
                 ))}
               </div>
-
               {!hasAnyLL && (
                 <div style={s.llEmptyState}>
                   Enter at least one mother lift (Bench Press or Back Squat) plus
@@ -852,6 +936,28 @@ export default function App() {
 
         <div style={s.footer}>40X0 Training · Move Better</div>
       </div>
+
+      {/* ── FLOATING EMAIL BUTTON ── */}
+      {showEmailBtn && (
+        <button
+          onClick={() => setShowModal(true)}
+          style={s.fab}
+          aria-label="Email my results"
+        >
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2.5" fill="none"/>
+            <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      )}
+
+      {/* ── EMAIL MODAL ── */}
+      {showModal && (
+        <EmailModal
+          onClose={() => setShowModal(false)}
+          emailData={buildEmailData()}
+        />
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
@@ -879,7 +985,7 @@ const s = {
   wrap: { maxWidth:620, margin:"0 auto", padding:"36px 20px 80px" },
 
   header: { marginBottom:0, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
-  brand: { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
+  brand:  { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
   title: {
     fontFamily:"'Bebas Neue',sans-serif",
     fontSize:"clamp(52px,12vw,76px)", lineHeight:0.9,
@@ -887,42 +993,30 @@ const s = {
   },
   tagline: { fontSize:11, color:"#bbb", letterSpacing:2, textTransform:"uppercase", fontWeight:600 },
 
-  // ── Tab bar ──────────────────────────────────────────────────────
-  tabBar: {
-    display:"flex", width:"100%",
-    borderBottom:"1px solid #E8E8E8",
-    marginBottom:0,
-  },
+  tabBar: { display:"flex", width:"100%", borderBottom:"1px solid #E8E8E8" },
   tabBtn: {
     flex:1, padding:"16px 8px",
-    fontFamily:"'Barlow',sans-serif",
-    fontSize:13, fontWeight:700, letterSpacing:0.5,
-    textTransform:"uppercase",
-    background:"#F5F5F5", border:"none",
-    color:"#999", cursor:"pointer",
-    transition:"all 0.13s",
+    fontFamily:"'Barlow',sans-serif", fontSize:13, fontWeight:700,
+    letterSpacing:0.5, textTransform:"uppercase",
+    background:"#F5F5F5", border:"none", color:"#999",
+    cursor:"pointer", transition:"all 0.13s",
     borderRight:"1px solid #E8E8E8",
   },
-  tabBtnOn: {
-    background:"#1A1A1A", color:"#fff",
-    borderRight:"1px solid #1A1A1A",
-  },
+  tabBtnOn: { background:"#1A1A1A", color:"#fff", borderRight:"1px solid #1A1A1A" },
 
-  section: { borderTop:"1px solid #E8E8E8", paddingTop:32, paddingBottom:32 },
-  sectionHead: { display:"flex", alignItems:"flex-start", gap:16, marginBottom:24 },
-  sectionNumBig: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:72, lineHeight:0.82, letterSpacing:2,
-    color:"#1A1A1A", flexShrink:0, userSelect:"none", marginTop:-4,
+  section:      { borderTop:"1px solid #E8E8E8", paddingTop:32, paddingBottom:32 },
+  sectionHead:  { display:"flex", alignItems:"flex-start", gap:16, marginBottom:24 },
+  sectionNumBig:{
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:72, lineHeight:0.82,
+    letterSpacing:2, color:"#1A1A1A", flexShrink:0, userSelect:"none", marginTop:-4,
   },
   sectionTitle: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:22, letterSpacing:1.5, color:"#1A1A1A", paddingTop:14,
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:22,
+    letterSpacing:1.5, color:"#1A1A1A", paddingTop:14,
   },
-  desc: { fontSize:13, color:"#888", marginBottom:18, lineHeight:1.6, fontStyle:"italic" },
-
+  desc:  { fontSize:13, color:"#888", marginBottom:18, lineHeight:1.6, fontStyle:"italic" },
   field: { marginBottom:18 },
-  rowWrap: { display:"flex", gap:20, flexWrap:"wrap", marginBottom:18 },
+  rowWrap:{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:18 },
   label: {
     display:"block", fontSize:10, letterSpacing:2.5,
     textTransform:"uppercase", color:"#aaa", fontWeight:700, marginBottom:8,
@@ -946,28 +1040,25 @@ const s = {
   },
   exBtnOn: { background:"#1A1A1A", borderColor:"#1A1A1A", color:"#fff" },
 
-  inputRow: { display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" },
+  inputRow:   { display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" },
   inputGroup: { display:"flex", alignItems:"center", gap:6, flexShrink:0 },
-
   bigInput: {
     width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
-    borderRadius:10, color:"#1A1A1A",
-    fontSize:38, fontFamily:"'Bebas Neue',sans-serif",
-    letterSpacing:2, padding:"10px 12px", textAlign:"center", flexShrink:0,
+    borderRadius:10, color:"#1A1A1A", fontSize:38,
+    fontFamily:"'Bebas Neue',sans-serif", letterSpacing:2,
+    padding:"10px 12px", textAlign:"center", flexShrink:0,
   },
   step2Input: {
     width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
-    borderRadius:10, color:"#1A1A1A",
-    fontSize:22, fontFamily:"'Bebas Neue',sans-serif",
-    letterSpacing:1, padding:"14px 12px", textAlign:"center", flexShrink:0,
+    borderRadius:10, color:"#1A1A1A", fontSize:22,
+    fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
+    padding:"14px 12px", textAlign:"center", flexShrink:0,
   },
   inputLabel: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:18, color:"#bbb", letterSpacing:2, flexShrink:0,
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:18, color:"#bbb", letterSpacing:2, flexShrink:0,
   },
   timesSymbol: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:30, color:"#ccc", letterSpacing:1, flexShrink:0,
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:30, color:"#ccc", letterSpacing:1, flexShrink:0,
   },
   textInput: {
     width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
@@ -979,10 +1070,9 @@ const s = {
     marginTop:20, padding:"20px", background:"#F8F8F8",
     border:"1.5px solid #E8E8E8", borderRadius:14,
   },
-  bigResultSub: { fontSize:11, color:"#bbb", letterSpacing:1, marginBottom:4 },
+  bigResultSub:   { fontSize:11, color:"#bbb", letterSpacing:1, marginBottom:4 },
   bigResultLabel: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:12, letterSpacing:5, color:"#bbb", marginBottom:12,
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:12, letterSpacing:5, color:"#bbb", marginBottom:12,
   },
   bigResultNum: {
     fontFamily:"'Bebas Neue',sans-serif",
@@ -993,9 +1083,8 @@ const s = {
   },
 
   ladderMeta: { fontSize:12, color:"#999", marginBottom:10 },
-
-  ladder: { borderRadius:12, overflow:"hidden", border:"1.5px solid #E8E8E8" },
-  ladderRow: {
+  ladder:     { borderRadius:12, overflow:"hidden", border:"1.5px solid #E8E8E8" },
+  ladderRow:  {
     display:"flex", alignItems:"center",
     padding:"13px 16px", borderBottom:"1px solid #F0F0F0", gap:0,
   },
@@ -1014,7 +1103,7 @@ const s = {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
     letterSpacing:1, color:"#1A1A1A", flexShrink:0,
   },
-  lUnit: { fontSize:13, marginLeft:2, color:"#bbb" },
+  lUnit:   { fontSize:13, marginLeft:2, color:"#bbb" },
   lTagTop: {
     fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
     color:"#888", background:"#333", padding:"3px 8px",
@@ -1084,14 +1173,12 @@ const s = {
   phaseTopSetRow: {
     fontSize:13, color:"#666", marginBottom:12,
     padding:"8px 12px", background:"#EFEFEF",
-    borderRadius:8, display:"inline-block",
-    alignSelf:"flex-start",
+    borderRadius:8, display:"inline-block", alignSelf:"flex-start",
   },
   warmupWrap: { marginBottom:12 },
   warmupToggleBtn: {
     background:"transparent", border:"1.5px solid #D0D0D0",
-    borderRadius:8, padding:"7px 14px", cursor:"pointer",
-    width:"100%",
+    borderRadius:8, padding:"7px 14px", cursor:"pointer", width:"100%",
   },
   warmupBtnLabel: {
     fontSize:11, letterSpacing:2, textTransform:"uppercase",
@@ -1122,66 +1209,55 @@ const s = {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
     letterSpacing:1, color:"#F0F0F0", flexShrink:0,
   },
-  warmupUnit: { fontSize:13, marginLeft:2, color:"#666" },
+  warmupUnit:       { fontSize:13, marginLeft:2, color:"#666" },
   warmupDisclaimer: {
     fontSize:11, color:"#666", fontStyle:"italic",
     padding:"8px 16px", borderTop:"1px solid #444",
   },
 
-  // ── Limiting Lift styles ──────────────────────────────────────────
-  llBlock: {
-    border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden",
-  },
+  // ── Limiting Lift ─────────────────────────────────────────────
+  llBlock: { border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden" },
   llBlockHeader: {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:4,
-    textTransform:"uppercase", color:"#fff", background:"#555",
-    padding:"12px 18px",
+    textTransform:"uppercase", color:"#fff", background:"#555", padding:"12px 18px",
   },
   llRow: {
     display:"flex", alignItems:"center", justifyContent:"space-between",
     padding:"13px 18px", borderBottom:"1px solid #F0F0F0",
     background:"#FAFAFA", gap:12, flexWrap:"wrap",
   },
-  llLiftName: { display:"flex", alignItems:"center", gap:10, minWidth:160 },
-  llLiftLabel: { fontSize:15, fontWeight:600, color:"#1A1A1A" },
-  llMotherBadge: {
+  llLiftName:   { display:"flex", alignItems:"center", gap:10, minWidth:160 },
+  llLiftLabel:  { fontSize:15, fontWeight:600, color:"#1A1A1A" },
+  llMotherBadge:{
     fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
     color:"#999", background:"#EFEFEF", padding:"3px 8px",
     borderRadius:4, fontWeight:700,
   },
-  llInputs: { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
+  llInputs:     { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
   llRepsInput: {
     width:72, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
     borderRadius:8, color:"#1A1A1A", fontSize:20,
     fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
     padding:"8px 6px", textAlign:"center",
   },
-  llTimes: {
-    fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc",
-  },
-  llWeightInput: {
+  llTimes:     { fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc" },
+  llWeightInput:{
     width:96, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
     borderRadius:8, color:"#1A1A1A", fontSize:20,
     fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
     padding:"8px 6px", textAlign:"center",
   },
-  llUnitLabel: {
-    fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:"#bbb", letterSpacing:1,
-  },
+  llUnitLabel: { fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:"#bbb", letterSpacing:1 },
 
-  // Results
-  llGroup: { borderBottom:"1px solid #F0F0F0" },
-  llGroupHeader: {
+  llGroup:      { borderBottom:"1px solid #F0F0F0" },
+  llGroupHeader:{
     display:"flex", alignItems:"center", justifyContent:"space-between",
     padding:"11px 16px", background:"#555", borderBottom:"1px solid #484848",
   },
   llGroupLabel: {
-    fontSize:11, letterSpacing:3, textTransform:"uppercase",
-    fontWeight:700, color:"#fff",
+    fontSize:11, letterSpacing:3, textTransform:"uppercase", fontWeight:700, color:"#fff",
   },
-  llLimitingFlag: {
-    fontSize:12, fontWeight:700, color:"#FFD580", letterSpacing:0.3,
-  },
+  llLimitingFlag: { fontSize:12, fontWeight:700, color:"#FFD580", letterSpacing:0.3 },
   llResultsTable: {},
   llResultRow: {
     display:"grid",
@@ -1197,27 +1273,14 @@ const s = {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
     color:"#aaa", fontWeight:700,
   },
-  llResultLimiting: {
-    background:"#FFF5F5", borderLeft:"3px solid #F44336",
-  },
-  llResultMother: { background:"#F8F8F8" },
-  llColLift: {
-    fontSize:13, fontWeight:600, color:"#1A1A1A",
-    display:"flex", alignItems:"center", gap:6,
-  },
-  llColE1rm: {
-    fontSize:15, fontFamily:"'Bebas Neue',sans-serif",
-    letterSpacing:1, color:"#1A1A1A", textAlign:"right",
-  },
+  llResultLimiting: { background:"#FFF0F0" },
+  llResultMother:   { background:"#F8F8F8" },
+  llColLift:   { fontSize:13, fontWeight:600, color:"#1A1A1A", display:"flex", alignItems:"center", gap:6 },
+  llColE1rm:   { fontSize:15, fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1, color:"#1A1A1A", textAlign:"right" },
   llColActual: { fontSize:13, fontWeight:600, textAlign:"right" },
   llColTarget: { fontSize:13, textAlign:"right" },
   llColGap:    { fontSize:13, fontWeight:700, textAlign:"right" },
-  llSmallUnit: {
-    fontSize:10, color:"#bbb", marginLeft:2,
-    fontFamily:"'Barlow',sans-serif",
-  },
-  llMotherDot:   { fontSize:8,  color:"#bbb" },
-  llLimitingDot: { fontSize:10 },
+  llSmallUnit: { fontSize:10, color:"#bbb", marginLeft:2, fontFamily:"'Barlow',sans-serif" },
   llLegend: {
     padding:"12px 16px", fontSize:12, color:"#999",
     background:"#FAFAFA", borderTop:"1px solid #F0F0F0",
@@ -1226,6 +1289,70 @@ const s = {
     marginTop:16, padding:"14px 16px",
     background:"#F8F8F8", border:"1.5px solid #E8E8E8",
     borderRadius:10, fontSize:13, color:"#bbb", fontStyle:"italic", lineHeight:1.6,
+  },
+
+  // ── Floating email button ─────────────────────────────────────
+  fab: {
+    position:"fixed", bottom:28, left:20,
+    width:52, height:52,
+    background:"#fff", border:"1.5px solid #1A1A1A",
+    borderRadius:"50%", cursor:"pointer",
+    display:"flex", alignItems:"center", justifyContent:"center",
+    boxShadow:"0 2px 12px rgba(0,0,0,0.12)",
+    zIndex:100, transition:"box-shadow 0.15s",
+  },
+
+  // ── Email modal ───────────────────────────────────────────────
+  modalOverlay: {
+    position:"fixed", inset:0,
+    background:"rgba(0,0,0,0.4)",
+    display:"flex", alignItems:"center", justifyContent:"center",
+    zIndex:200, padding:20,
+  },
+  modalBox: {
+    background:"#fff", borderRadius:16,
+    padding:"36px 28px 28px",
+    width:"100%", maxWidth:380,
+    position:"relative",
+    boxShadow:"0 8px 40px rgba(0,0,0,0.18)",
+    display:"flex", flexDirection:"column", alignItems:"center", gap:12,
+  },
+  modalClose: {
+    position:"absolute", top:14, right:14,
+    background:"transparent", border:"none",
+    fontSize:16, color:"#bbb", cursor:"pointer",
+    fontFamily:"'Barlow',sans-serif",
+  },
+  modalIcon: {
+    width:56, height:56, borderRadius:"50%",
+    border:"1.5px solid #E8E8E8",
+    display:"flex", alignItems:"center", justifyContent:"center",
+    marginBottom:4,
+  },
+  modalTitle: {
+    fontFamily:"'Bebas Neue',sans-serif",
+    fontSize:24, letterSpacing:2, color:"#1A1A1A", textAlign:"center",
+  },
+  modalDesc: {
+    fontSize:13, color:"#999", textAlign:"center",
+    lineHeight:1.6, fontStyle:"italic",
+  },
+  modalInput: {
+    width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:10, color:"#1A1A1A", fontSize:15,
+    padding:"13px 14px", fontFamily:"'Barlow',sans-serif",
+    textAlign:"center", marginTop:4,
+  },
+  modalSendBtn: {
+    width:"100%", background:"#1A1A1A", color:"#fff",
+    border:"none", borderRadius:10, padding:"14px",
+    fontSize:13, fontWeight:700, letterSpacing:1,
+    textTransform:"uppercase", cursor:"pointer",
+    fontFamily:"'Barlow',sans-serif", marginTop:4,
+    transition:"opacity 0.15s",
+  },
+  modalError: {
+    fontSize:12, color:"#C0392B", textAlign:"center",
   },
 
   footer: {
