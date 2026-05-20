@@ -935,21 +935,21 @@ export default function App() {
         )}
 
         <div style={s.footer}>40X0 Training · Move Better</div>
-      </div>
 
-      {/* ── FLOATING EMAIL BUTTON ── */}
-      {showEmailBtn && (
-        <button
-          onClick={() => setShowModal(true)}
-          style={s.fab}
-          aria-label="Email my results"
-        >
-          <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2.5" fill="none"/>
-            <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
-          </svg>
-        </button>
-      )}
+        {/* ── FLOATING EMAIL BUTTON ── inside wrap so it works in iframe */}
+        {showEmailBtn && (
+          <button
+            onClick={() => setShowModal(true)}
+            style={s.fab}
+            aria-label="Email my results"
+          >
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2.5" fill="none"/>
+              <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* ── EMAIL MODAL ── */}
       {showModal && (
@@ -982,7 +982,7 @@ const s = {
     minHeight:"100vh", background:"#fff",
     fontFamily:"'Barlow',sans-serif", color:"#1A1A1A",
   },
-  wrap: { maxWidth:620, margin:"0 auto", padding:"36px 20px 80px" },
+  wrap: { maxWidth:620, margin:"0 auto", padding:"36px 20px 80px", position:"relative" },
 
   header: { marginBottom:0, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
   brand:  { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
@@ -1293,13 +1293,14 @@ const s = {
 
   // ── Floating email button ─────────────────────────────────────
   fab: {
-    position:"fixed", bottom:28, left:"calc(50vw - 290px)",
+    position:"sticky", bottom:28, left:4,
     width:52, height:52,
     background:"#fff", border:"1.5px solid #1A1A1A",
     borderRadius:"50%", cursor:"pointer",
     display:"flex", alignItems:"center", justifyContent:"center",
     boxShadow:"0 2px 12px rgba(0,0,0,0.12)",
     zIndex:100, transition:"box-shadow 0.15s",
+    marginTop:-72, float:"left", clear:"both",
   },
 
   // ── Email modal ───────────────────────────────────────────────
