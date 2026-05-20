@@ -1,11 +1,12 @@
 import { useState } from "react";
 
-// ── Continuum table ───────────────────────────────────────────────
+// ── Continuum table (extended to 20 reps) ────────────────────────
 const PCT = {
-  1:1.00,2:0.94,3:0.90,4:0.88,5:0.85,6:0.83,7:0.80,8:0.78,
-  9:0.76,10:0.74,11:0.72,12:0.70,13:0.68,14:0.67,15:0.66,
+  1:1.00, 2:0.94, 3:0.90, 4:0.88, 5:0.85, 6:0.83, 7:0.80, 8:0.78,
+  9:0.76, 10:0.74, 11:0.72, 12:0.70, 13:0.68, 14:0.67, 15:0.66,
+  16:0.65, 17:0.63, 18:0.62, 19:0.61, 20:0.60,
 };
-const getPct = (r) => PCT[Math.max(1, Math.min(15, r))] ?? 0.66;
+const getPct = (r) => PCT[Math.max(1, Math.min(20, r))] ?? 0.60;
 
 const STEP_PCT = {
   2:0.05, 3:0.05, 4:0.075, 5:0.10, 6:0.125, 7:0.15,
@@ -25,6 +26,46 @@ const PRESETS = [
 
 const MAX_COMPLEX_SLOTS = 8;
 
+// ── Limiting Lift System ─────────────────────────────────────────
+const LIFT_DEFS = [
+  { key:"bench",    label:"Bench Press",        group:"upper", motherKey:null,     targetRatio:null },
+  { key:"ohp",      label:"Overhead Press",      group:"upper", motherKey:"bench",  targetRatio:0.72 },
+  { key:"incline",  label:"Incline Press",        group:"upper", motherKey:"bench",  targetRatio:0.91 },
+  { key:"dips",     label:"Dips / Decline Press", group:"upper", motherKey:"bench",  targetRatio:1.17 },
+  { key:"chinup",   label:"Chin-up",              group:"upper", motherKey:"bench",  targetRatio:0.87 },
+  { key:"squat",    label:"Back Squat",           group:"lower", motherKey:null,     targetRatio:null },
+  { key:"deadlift", label:"Deadlift",             group:"lower", motherKey:"squat",  targetRatio:1.25 },
+  { key:"frontsq",  label:"Front Squat",          group:"lower", motherKey:"squat",  targetRatio:0.85 },
+];
+
+function calcLimitingLifts(inputs) {
+  const e1rms = {};
+  for (const def of LIFT_DEFS) {
+    const inp = inputs[def.key];
+    if (inp && inp.weight > 0 && inp.reps >= 1) {
+      e1rms[def.key] = inp.weight / getPct(inp.reps);
+    }
+  }
+  const results = LIFT_DEFS.map(def => {
+    const e1rm = e1rms[def.key] ?? null;
+    if (def.motherKey === null) {
+      return { ...def, e1rm, actualRatio: null, gap: null };
+    }
+    const motherE1rm = e1rms[def.motherKey] ?? null;
+    const actualRatio = (e1rm && motherE1rm) ? e1rm / motherE1rm : null;
+    const gap = (actualRatio !== null) ? actualRatio - def.targetRatio : null;
+    return { ...def, e1rm, actualRatio, gap };
+  });
+
+  for (const group of ["upper","lower"]) {
+    const dependents = results.filter(r => r.group === group && r.motherKey !== null && r.gap !== null);
+    if (dependents.length === 0) continue;
+    const mostNegative = dependents.reduce((a, b) => (a.gap < b.gap ? a : b));
+    if (mostNegative.gap < 0) mostNegative.isLimiting = true;
+  }
+  return results;
+}
+
 // ── Rounding ──────────────────────────────────────────────────────
 const roundHalf     = (n) => Math.round(n * 2) / 2;
 const roundNearest5 = (n) => Math.round(n / 5) * 5;
@@ -37,12 +78,20 @@ function fmt(n) {
   if (n === undefined || n === null || isNaN(n)) return "—";
   return n % 1 === 0 ? String(n) : n.toFixed(1);
 }
-
 function fmtPct(n) {
   const sign = n >= 0 ? "+" : "−";
   const abs  = Math.abs(n * 100);
   const str  = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1);
   return `${sign}${str}%`;
+}
+function fmtRatioPct(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  return (n * 100).toFixed(1) + "%";
+}
+function fmtGap(n) {
+  if (n === null || n === undefined || isNaN(n)) return "—";
+  const pct = (n * 100).toFixed(1);
+  return (n >= 0 ? "+" : "") + pct + "%";
 }
 
 // ── Calculations ──────────────────────────────────────────────────
@@ -76,14 +125,7 @@ function buildWarmup(bottomSetWeight, micro) {
   }));
 }
 
-// ── Shared column widths for alignment ────────────────────────────
-// SET label | REPS label | WEIGHT (fixed) | TAG
-// These must match between warm-up rows and working set rows
-const COL = {
-  set:    46,  // "SET 1"
-  reps:   72,  // "6 REPS"
-  weight: 120, // the number — fixed width so all weights left-align
-};
+const COL = { set:46, reps:72, weight:120 };
 
 // ── Components ────────────────────────────────────────────────────
 function Toggle({ options, value, onChange }) {
@@ -124,7 +166,6 @@ function BigResult({ sublabel, label, value, unit }) {
   );
 }
 
-// Warm-up block — uses same column widths as working ladder
 function WarmupBlock({ bottomSetWeight, unit, micro }) {
   const [open, setOpen] = useState(false);
   const warmup = buildWarmup(bottomSetWeight, micro);
@@ -156,7 +197,6 @@ function WarmupBlock({ bottomSetWeight, unit, micro }) {
   );
 }
 
-// Standard ladder — same column widths as warm-up
 function Ladder({ steps, targetReps, unit }) {
   return (
     <div style={s.ladder}>
@@ -186,7 +226,6 @@ function Ladder({ steps, targetReps, unit }) {
   );
 }
 
-// Complex per-set list — same column widths
 function ComplexSetList({ sets, unit }) {
   return (
     <div style={s.ladder}>
@@ -204,7 +243,6 @@ function ComplexSetList({ sets, unit }) {
   );
 }
 
-// Pct adjuster
 function PctAdjuster({ value, onChange }) {
   const step = 0.005;
   return (
@@ -216,19 +254,15 @@ function PctAdjuster({ value, onChange }) {
   );
 }
 
-// Standard phase card
 function PhaseCard({ phase, esRepMaxRaw, defaultSets, targetReps, unit, micro }) {
   const [weekSetsInput, setWeekSetsInput] = useState("");
   const [pct, setPct] = useState(phase.defaultPct);
-
   const overrideSets = parseInt(weekSetsInput);
   const activeSets   = (overrideSets >= 2 && overrideSets <= 12) ? overrideSets : defaultSets;
-
   const topSetRaw     = esRepMaxRaw * (1 + pct);
   const topSetDisplay = roundHalf(topSetRaw);
   const ladder        = buildLadder(topSetRaw, activeSets, micro);
   const bottomSet     = ladder[0];
-
   return (
     <div style={s.phaseCard}>
       <div style={s.phaseTop}>
@@ -247,32 +281,25 @@ function PhaseCard({ phase, esRepMaxRaw, defaultSets, targetReps, unit, micro })
           />
         </div>
       </div>
-
-      {/* Top set info — left aligned */}
       <div style={s.phaseTopSetRow}>
         Top set: <strong>{fmt(topSetDisplay)}{unit}</strong>
         {" · "}{activeSets} sets
       </div>
-
       <WarmupBlock bottomSetWeight={bottomSet} unit={unit} micro={micro} />
       <Ladder steps={ladder} targetReps={targetReps} unit={unit} />
     </div>
   );
 }
 
-// Complex phase card
 function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
   const [pct, setPct] = useState(phase.defaultPct);
-
   const phasedSets = complexSets.map(set => ({
     repCount: set.repCount,
     weight: roundStep(set.weightRaw * (1 + pct), micro),
   }));
-
   const bottomSet = phasedSets.length > 0
     ? Math.min(...phasedSets.map(s => s.weight))
     : 0;
-
   return (
     <div style={s.phaseCard}>
       <div style={s.phaseTop}>
@@ -290,7 +317,6 @@ function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
   );
 }
 
-// Complex input grid
 function ComplexInput({ slots, onChange }) {
   return (
     <div style={s.complexWrap}>
@@ -319,8 +345,120 @@ function ComplexInput({ slots, onChange }) {
   );
 }
 
+// ── Limiting Lift Components ──────────────────────────────────────
+function LiftInputRow({ def, value, onChange, unit }) {
+  const isMother = def.motherKey === null;
+  return (
+    <div style={s.llRow}>
+      <div style={s.llLiftName}>
+        <span style={s.llLiftLabel}>{def.label}</span>
+        {isMother && <span style={s.llMotherBadge}>Mother Lift</span>}
+      </div>
+      <div style={s.llInputs}>
+        <input
+          type="number" min="1" max="20" placeholder="Reps"
+          value={value.reps}
+          onChange={e => onChange({ ...value, reps: e.target.value })}
+          style={s.llRepsInput}
+        />
+        <span style={s.llTimes}>×</span>
+        <input
+          type="number" min="1" placeholder="Weight"
+          value={value.weight}
+          onChange={e => onChange({ ...value, weight: e.target.value })}
+          style={s.llWeightInput}
+        />
+        <span style={s.llUnitLabel}>{unit}</span>
+      </div>
+    </div>
+  );
+}
+
+function LimitingLiftResults({ results, unit }) {
+  function GroupBlock({ lifts, groupLabel }) {
+    const hasData = lifts.some(l => l.e1rm !== null);
+    if (!hasData) return null;
+    const limiting = lifts.find(l => l.isLimiting);
+    return (
+      <div style={s.llGroup}>
+        <div style={s.llGroupHeader}>
+          <span style={s.llGroupLabel}>{groupLabel}</span>
+          {limiting && (
+            <span style={s.llLimitingFlag}>⚡ Limiting: {limiting.label}</span>
+          )}
+        </div>
+        <div style={s.llResultsTable}>
+          <div style={{ ...s.llResultRow, ...s.llResultHeader }}>
+            <span style={s.llColLift}>Lift</span>
+            <span style={s.llColE1rm}>ES1RM</span>
+            <span style={s.llColActual}>Actual</span>
+            <span style={s.llColTarget}>Target</span>
+            <span style={s.llColGap}>Gap</span>
+          </div>
+          {lifts.map(lift => {
+            if (lift.e1rm === null) return null;
+            const isMother   = lift.motherKey === null;
+            const isLimiting = !!lift.isLimiting;
+            const gap        = lift.gap;
+            const gapColor   = isMother ? "#bbb"
+              : gap === null   ? "#bbb"
+              : gap >= 0       ? "#4CAF50"
+              : gap > -0.05    ? "#FF9800"
+              : "#F44336";
+            return (
+              <div key={lift.key} style={{
+                ...s.llResultRow,
+                ...(isLimiting ? s.llResultLimiting : {}),
+                ...(isMother   ? s.llResultMother   : {}),
+              }}>
+                <span style={s.llColLift}>
+                  {lift.label}
+                  {isMother   && <span style={s.llMotherDot}>●</span>}
+                  {isLimiting && <span style={s.llLimitingDot}>⚡</span>}
+                </span>
+                <span style={s.llColE1rm}>
+                  {fmt(roundHalf(lift.e1rm))}<span style={s.llSmallUnit}>{unit}</span>
+                </span>
+                <span style={{ ...s.llColActual, color: isMother ? "#bbb" : "#1A1A1A" }}>
+                  {isMother ? "—" : fmtRatioPct(lift.actualRatio)}
+                </span>
+                <span style={{ ...s.llColTarget, color:"#bbb" }}>
+                  {isMother ? "—" : fmtRatioPct(lift.targetRatio)}
+                </span>
+                <span style={{ ...s.llColGap, color: gapColor }}>
+                  {isMother ? "—" : fmtGap(gap)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const upper = results.filter(r => r.group === "upper");
+  const lower = results.filter(r => r.group === "lower");
+  return (
+    <div>
+      <GroupBlock lifts={upper} groupLabel="Upper Body" />
+      <GroupBlock lifts={lower} groupLabel="Lower Body" />
+      <div style={s.llLegend}>
+        <span style={{ color:"#4CAF50" }}>■</span> At or above target &nbsp;&nbsp;
+        <span style={{ color:"#FF9800" }}>■</span> Within 5% below &nbsp;&nbsp;
+        <span style={{ color:"#F44336" }}>■</span> More than 5% below
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────
+const EMPTY_LIFT = { reps: "", weight: "" };
+
 export default function App() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState("planner");
+
+  // 1RM Planner state
   const [weight,       setWeight]       = useState("");
   const [topReps,      setTopReps]      = useState("");
   const [unit,         setUnit]         = useState("lbs");
@@ -333,6 +471,15 @@ export default function App() {
   const [mode,         setMode]         = useState("standard");
   const [complexSlots, setComplexSlots] = useState(Array(MAX_COMPLEX_SLOTS).fill(""));
 
+  // Limiting lift state
+  const [llUnit,   setLlUnit]   = useState("lbs");
+  const [llInputs, setLLInputs] = useState(
+    Object.fromEntries(LIFT_DEFS.map(d => [d.key, { ...EMPTY_LIFT }]))
+  );
+  const setLLInput = (key, val) =>
+    setLLInputs(prev => ({ ...prev, [key]: val }));
+
+  // Planner calcs
   const w  = parseFloat(weight);
   const r  = parseInt(topReps);
   const tr = parseInt(targetReps);
@@ -368,6 +515,24 @@ export default function App() {
     ? (!!esRepMaxDisplay && hasSets)
     : hasComplex;
 
+  // Limiting lift calcs
+  const llParsed = Object.fromEntries(
+    LIFT_DEFS.map(d => {
+      const inp  = llInputs[d.key];
+      const reps = parseInt(inp.reps);
+      const wt   = parseFloat(inp.weight);
+      return [d.key, (reps >= 1 && reps <= 20 && wt > 0) ? { reps, weight: wt } : null];
+    })
+  );
+  const hasUpperLL = llParsed["bench"] && LIFT_DEFS
+    .filter(d => d.group === "upper" && d.motherKey)
+    .some(d => llParsed[d.key]);
+  const hasLowerLL = llParsed["squat"] && LIFT_DEFS
+    .filter(d => d.group === "lower" && d.motherKey)
+    .some(d => llParsed[d.key]);
+  const hasAnyLL  = hasUpperLL || hasLowerLL;
+  const llResults = hasAnyLL ? calcLimitingLifts(llParsed) : null;
+
   return (
     <div style={s.root}>
       <div style={s.wrap}>
@@ -375,219 +540,315 @@ export default function App() {
         {/* HEADER */}
         <header style={s.header}>
           <div style={s.brand}>40X0 Training</div>
-          <h1 style={s.title}>1RM &amp; Load<br/>Planner</h1>
-          <p style={s.tagline}>ES1RM · Target Rep Max · Step Load · Phase Plan</p>
+          <h1 style={s.title}>
+            {activeTab === "planner" ? <>1RM &amp; Load<br/>Planner</> : <>Limiting Lift<br/>Calculator</>}
+          </h1>
+          <p style={s.tagline}>
+            {activeTab === "planner"
+              ? "ES1RM · Target Rep Max · Step Load · Phase Plan"
+              : "Upper & Lower Strength Ratio Analysis"}
+          </p>
         </header>
 
-        {/* ── STEP 1 ── */}
-        <Section num="01" title="Find Your Estimated 1-Rep Max" show>
-          <div style={s.rowWrap}>
-            <div style={s.field}>
-              <label style={s.label}>Unit</label>
-              <Toggle
-                value={unit}
-                onChange={setUnit}
-                options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
-              />
-            </div>
-            <div style={s.field}>
-              <label style={s.label}>Have Micro Plates?</label>
-              <Toggle
-                value={micro ? "yes" : "no"}
-                onChange={v => setMicro(v === "yes")}
-                options={[{ value:"yes", label:"Yes" }, { value:"no", label:"No" }]}
-              />
-            </div>
-          </div>
+        {/* ── TAB BUTTONS ── */}
+        <div style={s.tabBar}>
+          <button
+            onClick={() => setActiveTab("planner")}
+            style={{ ...s.tabBtn, ...(activeTab === "planner" ? s.tabBtnOn : {}) }}
+          >
+            1RM &amp; Load Planner
+          </button>
+          <button
+            onClick={() => setActiveTab("limiting")}
+            style={{ ...s.tabBtn, ...(activeTab === "limiting" ? s.tabBtnOn : {}) }}
+          >
+            Limiting Lift Calculator
+          </button>
+        </div>
 
-          <div style={s.field}>
-            <label style={s.label}>
-              Exercise <span style={s.hint}>(optional — label only)</span>
-            </label>
-            <div style={s.exGrid}>
-              {PRESETS.map(p => (
-                <button key={p}
-                  onClick={() => { setExercise(p); setShowCustom(false); }}
-                  style={{ ...s.exBtn, ...(!showCustom && exercise === p ? s.exBtnOn : {}) }}>
-                  {p}
-                </button>
-              ))}
-              <button onClick={() => setShowCustom(true)}
-                style={{ ...s.exBtn, ...(showCustom ? s.exBtnOn : {}), gridColumn:"span 2" }}>
-                + Custom
-              </button>
-            </div>
-            {showCustom && (
-              <input placeholder="Exercise name…" value={customEx}
-                onChange={e => setCustomEx(e.target.value)}
-                style={{ ...s.textInput, marginTop:8 }} />
-            )}
-          </div>
-
-          <div style={s.field}>
-            <label style={s.label}>Top Set</label>
-            <div style={s.inputRow}>
-              <div style={s.inputGroup}>
-                <input
-                  type="number" min="1" placeholder="100"
-                  value={weight}
-                  onChange={e => setWeight(e.target.value)}
-                  style={s.bigInput}
-                />
-                <span style={s.inputLabel}>{unit}</span>
+        {/* ══════════════════════════════════════════
+            TAB 1 — 1RM & LOAD PLANNER
+        ══════════════════════════════════════════ */}
+        {activeTab === "planner" && (
+          <>
+            {/* ── STEP 1 ── */}
+            <Section num="01" title="Find Your Estimated 1-Rep Max" show>
+              <div style={s.rowWrap}>
+                <div style={s.field}>
+                  <label style={s.label}>Unit</label>
+                  <Toggle
+                    value={unit}
+                    onChange={setUnit}
+                    options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
+                  />
+                </div>
+                <div style={s.field}>
+                  <label style={s.label}>Have Micro Plates?</label>
+                  <Toggle
+                    value={micro ? "yes" : "no"}
+                    onChange={v => setMicro(v === "yes")}
+                    options={[{ value:"yes", label:"Yes" }, { value:"no", label:"No" }]}
+                  />
+                </div>
               </div>
-              <span style={s.timesSymbol}>×</span>
-              <div style={s.inputGroup}>
-                <input
-                  type="number" min="1" max="15" placeholder="5"
-                  value={topReps}
-                  onChange={e => setTopReps(e.target.value)}
-                  style={s.bigInput}
-                />
-                <span style={s.inputLabel}>Reps</span>
-              </div>
-            </div>
-          </div>
 
-          {e1rmDisplay && (
-            <BigResult
-              sublabel={
-                exLabel
-                  ? `${exLabel} · ${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
-                  : `${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
-              }
-              label="Estimated 1-Rep Max"
-              value={fmt(e1rmDisplay)}
-              unit={unit}
-            />
-          )}
-        </Section>
-
-        {/* ── STEP 2 ── */}
-        <Section num="02" title="New Mesocycle Sets × Reps" show={!!e1rmDisplay}>
-          <div style={s.field}>
-            <label style={s.label}>Rep Scheme Type</label>
-            <Toggle
-              value={mode}
-              onChange={setMode}
-              options={[
-                { value:"standard", label:"Standard Reps" },
-                { value:"complex",  label:"Complex Reps"  },
-              ]}
-            />
-          </div>
-
-          {mode === "standard" && (
-            <>
-              <p style={s.desc}>
-                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your target sets and reps.
-              </p>
               <div style={s.field}>
-                <label style={s.label}>Target Sets × Reps</label>
+                <label style={s.label}>
+                  Exercise <span style={s.hint}>(optional — label only)</span>
+                </label>
+                <div style={s.exGrid}>
+                  {PRESETS.map(p => (
+                    <button key={p}
+                      onClick={() => { setExercise(p); setShowCustom(false); }}
+                      style={{ ...s.exBtn, ...(!showCustom && exercise === p ? s.exBtnOn : {}) }}>
+                      {p}
+                    </button>
+                  ))}
+                  <button onClick={() => setShowCustom(true)}
+                    style={{ ...s.exBtn, ...(showCustom ? s.exBtnOn : {}), gridColumn:"span 2" }}>
+                    + Custom
+                  </button>
+                </div>
+                {showCustom && (
+                  <input placeholder="Exercise name…" value={customEx}
+                    onChange={e => setCustomEx(e.target.value)}
+                    style={{ ...s.textInput, marginTop:8 }} />
+                )}
+              </div>
+
+              <div style={s.field}>
+                <label style={s.label}>Top Set</label>
                 <div style={s.inputRow}>
                   <div style={s.inputGroup}>
                     <input
-                      type="number" min="2" max="12" placeholder="Sets"
-                      value={targetSets}
-                      onChange={e => setTargetSets(e.target.value)}
-                      style={s.step2Input}
+                      type="number" min="1" placeholder="100"
+                      value={weight}
+                      onChange={e => setWeight(e.target.value)}
+                      className="no-spinner"
+                      style={s.bigInput}
                     />
-                    <span style={s.inputLabel}>Sets</span>
+                    <span style={s.inputLabel}>{unit}</span>
                   </div>
                   <span style={s.timesSymbol}>×</span>
                   <div style={s.inputGroup}>
                     <input
-                      type="number" min="1" max="15" placeholder="Reps"
-                      value={targetReps}
-                      onChange={e => setTargetReps(e.target.value)}
-                      style={s.step2Input}
+                      type="number" min="1" max="15" placeholder="5"
+                      value={topReps}
+                      onChange={e => setTopReps(e.target.value)}
+                      className="no-spinner"
+                      style={s.bigInput}
                     />
                     <span style={s.inputLabel}>Reps</span>
                   </div>
                 </div>
               </div>
 
-              {esRepMaxDisplay && (
+              {e1rmDisplay && (
                 <BigResult
-                  label={`Estimated ${tr}-Rep Max`}
-                  value={fmt(esRepMaxDisplay)}
+                  sublabel={
+                    exLabel
+                      ? `${exLabel} · ${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
+                      : `${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
+                  }
+                  label="Estimated 1-Rep Max"
+                  value={fmt(e1rmDisplay)}
                   unit={unit}
                 />
               )}
+            </Section>
 
-              {ladder && (
-                <div style={{ marginTop:20 }}>
-                  <div style={s.ladderMeta}>
-                    <strong>{ts} sets</strong> · Spread: <strong>{Math.round((STEP_PCT[ts] ?? 0.10) * 100)}%</strong>
-                    {" · "}Bottom: <strong>{fmt(ladder[0])}{unit}</strong>
-                    {" · "}Top: <strong>{fmt(ladder[ladder.length - 1])}{unit}</strong>
+            {/* ── STEP 2 ── */}
+            <Section num="02" title="New Mesocycle Sets × Reps" show={!!e1rmDisplay}>
+              <div style={s.field}>
+                <label style={s.label}>Rep Scheme Type</label>
+                <Toggle
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    { value:"standard", label:"Standard Reps" },
+                    { value:"complex",  label:"Complex Reps"  },
+                  ]}
+                />
+              </div>
+
+              {mode === "standard" && (
+                <>
+                  <p style={s.desc}>
+                    Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your target sets and reps.
+                  </p>
+                  <div style={s.field}>
+                    <label style={s.label}>Target Sets × Reps</label>
+                    <div style={s.inputRow}>
+                      <div style={s.inputGroup}>
+                        <input
+                          type="number" min="2" max="12" placeholder="Sets"
+                          value={targetSets}
+                          onChange={e => setTargetSets(e.target.value)}
+                          style={s.step2Input}
+                        />
+                        <span style={s.inputLabel}>Sets</span>
+                      </div>
+                      <span style={s.timesSymbol}>×</span>
+                      <div style={s.inputGroup}>
+                        <input
+                          type="number" min="1" max="15" placeholder="Reps"
+                          value={targetReps}
+                          onChange={e => setTargetReps(e.target.value)}
+                          style={s.step2Input}
+                        />
+                        <span style={s.inputLabel}>Reps</span>
+                      </div>
+                    </div>
                   </div>
-                  <Ladder steps={ladder} targetReps={tr} unit={unit} />
-                </div>
-              )}
-            </>
-          )}
 
-          {mode === "complex" && (
-            <>
-              <p style={s.desc}>
-                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your rep scheme.
-              </p>
-              <ComplexInput slots={complexSlots} onChange={setComplexSlots} />
-              {hasComplex && (
-                <div style={{ ...s.bigResult, marginTop:16 }}>
-                  <div style={s.bigResultLabel}>Rep Scheme Weights</div>
-                  <ComplexSetList sets={complexSets} unit={unit} />
-                </div>
-              )}
-            </>
-          )}
-        </Section>
+                  {esRepMaxDisplay && (
+                    <BigResult
+                      label={`Estimated ${tr}-Rep Max`}
+                      value={fmt(esRepMaxDisplay)}
+                      unit={unit}
+                    />
+                  )}
 
-        {/* ── STEP 3 ── */}
-        <Section num="03" title="3-Week Phase Plan" show={canShowPhase}>
-          {mode === "standard" && (
-            <>
+                  {ladder && (
+                    <div style={{ marginTop:20 }}>
+                      <div style={s.ladderMeta}>
+                        <strong>{ts} sets</strong> · Spread: <strong>{Math.round((STEP_PCT[ts] ?? 0.10) * 100)}%</strong>
+                        {" · "}Bottom: <strong>{fmt(ladder[0])}{unit}</strong>
+                        {" · "}Top: <strong>{fmt(ladder[ladder.length - 1])}{unit}</strong>
+                      </div>
+                      <Ladder steps={ladder} targetReps={tr} unit={unit} />
+                    </div>
+                  )}
+                </>
+              )}
+
+              {mode === "complex" && (
+                <>
+                  <p style={s.desc}>
+                    Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your rep scheme.
+                  </p>
+                  <ComplexInput slots={complexSlots} onChange={setComplexSlots} />
+                  {hasComplex && (
+                    <div style={{ ...s.bigResult, marginTop:16 }}>
+                      <div style={s.bigResultLabel}>Rep Scheme Weights</div>
+                      <ComplexSetList sets={complexSets} unit={unit} />
+                    </div>
+                  )}
+                </>
+              )}
+            </Section>
+
+            {/* ── STEP 3 ── */}
+            <Section num="03" title="3-Week Phase Plan" show={canShowPhase}>
+              {mode === "standard" && (
+                <>
+                  <p style={s.desc}>
+                    Each week adjusts from your ES{tr}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
+                    Adjust percentages and sets per week as needed.
+                  </p>
+                  <div style={s.phaseGrid}>
+                    {PHASE.map(ph => (
+                      <PhaseCard
+                        key={ph.week}
+                        phase={ph}
+                        esRepMaxRaw={esRepMaxRaw}
+                        defaultSets={ts}
+                        targetReps={tr}
+                        unit={unit}
+                        micro={micro}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+              {mode === "complex" && hasComplex && (
+                <>
+                  <p style={s.desc}>
+                    Each week applies phase percentages to each set individually.
+                    Adjust percentages per week as needed.
+                  </p>
+                  <div style={s.phaseGrid}>
+                    {PHASE.map(ph => (
+                      <ComplexPhaseCard
+                        key={ph.week}
+                        phase={ph}
+                        complexSets={complexSets}
+                        unit={unit}
+                        micro={micro}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </Section>
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════
+            TAB 2 — LIMITING LIFT CALCULATOR
+        ══════════════════════════════════════════ */}
+        {activeTab === "limiting" && (
+          <>
+            <Section num="01" title="Enter Lift Data" show>
+              <div style={s.rowWrap}>
+                <div style={s.field}>
+                  <label style={s.label}>Unit</label>
+                  <Toggle
+                    value={llUnit}
+                    onChange={setLlUnit}
+                    options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
+                  />
+                </div>
+              </div>
+
               <p style={s.desc}>
-                Each week adjusts from your ES{tr}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
-                Adjust percentages and sets per week as needed.
+                Enter reps × weight for each lift. The limiting lift per group is the one
+                with the largest negative gap from its target ratio relative to the mother lift.
               </p>
-              <div style={s.phaseGrid}>
-                {PHASE.map(ph => (
-                  <PhaseCard
-                    key={ph.week}
-                    phase={ph}
-                    esRepMaxRaw={esRepMaxRaw}
-                    defaultSets={ts}
-                    targetReps={tr}
-                    unit={unit}
-                    micro={micro}
+
+              {/* Upper Body */}
+              <div style={s.llBlock}>
+                <div style={s.llBlockHeader}>Upper Body</div>
+                {LIFT_DEFS.filter(d => d.group === "upper").map(def => (
+                  <LiftInputRow
+                    key={def.key}
+                    def={def}
+                    value={llInputs[def.key]}
+                    onChange={val => setLLInput(def.key, val)}
+                    unit={llUnit}
                   />
                 ))}
               </div>
-            </>
-          )}
 
-          {mode === "complex" && hasComplex && (
-            <>
-              <p style={s.desc}>
-                Each week applies phase percentages to each set individually.
-                Adjust percentages per week as needed.
-              </p>
-              <div style={s.phaseGrid}>
-                {PHASE.map(ph => (
-                  <ComplexPhaseCard
-                    key={ph.week}
-                    phase={ph}
-                    complexSets={complexSets}
-                    unit={unit}
-                    micro={micro}
+              {/* Lower Body */}
+              <div style={{ ...s.llBlock, marginTop:20 }}>
+                <div style={s.llBlockHeader}>Lower Body</div>
+                {LIFT_DEFS.filter(d => d.group === "lower").map(def => (
+                  <LiftInputRow
+                    key={def.key}
+                    def={def}
+                    value={llInputs[def.key]}
+                    onChange={val => setLLInput(def.key, val)}
+                    unit={llUnit}
                   />
                 ))}
               </div>
-            </>
-          )}
-        </Section>
+
+              {!hasAnyLL && (
+                <div style={s.llEmptyState}>
+                  Enter at least one mother lift (Bench Press or Back Squat) plus
+                  one dependent lift to see the analysis.
+                </div>
+              )}
+            </Section>
+
+            {hasAnyLL && llResults && (
+              <Section num="02" title="Ratio Analysis" show>
+                <LimitingLiftResults results={llResults} unit={llUnit} />
+              </Section>
+            )}
+          </>
+        )}
 
         <div style={s.footer}>40X0 Training · Move Better</div>
       </div>
@@ -601,6 +862,9 @@ export default function App() {
         button:active { transform:scale(0.97); }
         input:focus, select:focus { outline:2px solid #1A1A1A; outline-offset:1px; }
         input[type=number]::-webkit-inner-spin-button { opacity:0.3; }
+        input.no-spinner::-webkit-inner-spin-button,
+        input.no-spinner::-webkit-outer-spin-button { -webkit-appearance:none; appearance:none; margin:0; }
+        input.no-spinner { -moz-appearance:textfield; }
       `}</style>
     </div>
   );
@@ -614,7 +878,7 @@ const s = {
   },
   wrap: { maxWidth:620, margin:"0 auto", padding:"36px 20px 80px" },
 
-  header: { marginBottom:44, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
+  header: { marginBottom:0, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
   brand: { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
   title: {
     fontFamily:"'Bebas Neue',sans-serif",
@@ -622,6 +886,27 @@ const s = {
     letterSpacing:2, color:"#1A1A1A", marginBottom:12,
   },
   tagline: { fontSize:11, color:"#bbb", letterSpacing:2, textTransform:"uppercase", fontWeight:600 },
+
+  // ── Tab bar ──────────────────────────────────────────────────────
+  tabBar: {
+    display:"flex", width:"100%",
+    borderBottom:"1px solid #E8E8E8",
+    marginBottom:0,
+  },
+  tabBtn: {
+    flex:1, padding:"16px 8px",
+    fontFamily:"'Barlow',sans-serif",
+    fontSize:13, fontWeight:700, letterSpacing:0.5,
+    textTransform:"uppercase",
+    background:"#F5F5F5", border:"none",
+    color:"#999", cursor:"pointer",
+    transition:"all 0.13s",
+    borderRight:"1px solid #E8E8E8",
+  },
+  tabBtnOn: {
+    background:"#1A1A1A", color:"#fff",
+    borderRight:"1px solid #1A1A1A",
+  },
 
   section: { borderTop:"1px solid #E8E8E8", paddingTop:32, paddingBottom:32 },
   sectionHead: { display:"flex", alignItems:"flex-start", gap:16, marginBottom:24 },
@@ -664,22 +949,18 @@ const s = {
   inputRow: { display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" },
   inputGroup: { display:"flex", alignItems:"center", gap:6, flexShrink:0 },
 
-  // Step 1 big inputs
   bigInput: {
     width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A",
     fontSize:38, fontFamily:"'Bebas Neue',sans-serif",
     letterSpacing:2, padding:"10px 12px", textAlign:"center", flexShrink:0,
   },
-
-  // Step 2 inputs — smaller font so placeholder fits
   step2Input: {
     width:120, background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A",
     fontSize:22, fontFamily:"'Bebas Neue',sans-serif",
     letterSpacing:1, padding:"14px 12px", textAlign:"center", flexShrink:0,
   },
-
   inputLabel: {
     fontFamily:"'Bebas Neue',sans-serif",
     fontSize:18, color:"#bbb", letterSpacing:2, flexShrink:0,
@@ -688,7 +969,6 @@ const s = {
     fontFamily:"'Bebas Neue',sans-serif",
     fontSize:30, color:"#ccc", letterSpacing:1, flexShrink:0,
   },
-
   textInput: {
     width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A", fontSize:15,
@@ -765,7 +1045,6 @@ const s = {
   },
   complexHintText: { fontSize:11, color:"#ccc", fontStyle:"italic", letterSpacing:0.3 },
 
-  // Phase card
   phaseGrid: { display:"flex", flexDirection:"column", gap:16 },
   phaseCard: {
     border:"1.5px solid #E8E8E8", borderRadius:16, padding:"20px", background:"#FAFAFA",
@@ -784,7 +1063,6 @@ const s = {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
     color:"#bbb", fontWeight:700, marginTop:2,
   },
-
   pctAdjRow: { display:"flex", alignItems:"center", gap:4 },
   pctBtn: {
     width:28, height:28, background:"#E8E8E8", border:"1.5px solid #D8D8D8",
@@ -797,23 +1075,18 @@ const s = {
     minWidth:52, textAlign:"center", letterSpacing:0.5,
     fontFamily:"'Barlow',sans-serif",
   },
-
   weekSetsInput: {
     width:90, background:"#fff", border:"1.5px solid #E0E0E0",
     borderRadius:8, color:"#1A1A1A", fontSize:12,
     padding:"5px 8px", fontFamily:"'Barlow',sans-serif",
     textAlign:"center", fontWeight:500,
   },
-
-  // Top set info — left aligned
   phaseTopSetRow: {
     fontSize:13, color:"#666", marginBottom:12,
     padding:"8px 12px", background:"#EFEFEF",
     borderRadius:8, display:"inline-block",
     alignSelf:"flex-start",
   },
-
-  // Warm-up
   warmupWrap: { marginBottom:12 },
   warmupToggleBtn: {
     background:"transparent", border:"1.5px solid #D0D0D0",
@@ -853,6 +1126,106 @@ const s = {
   warmupDisclaimer: {
     fontSize:11, color:"#666", fontStyle:"italic",
     padding:"8px 16px", borderTop:"1px solid #444",
+  },
+
+  // ── Limiting Lift styles ──────────────────────────────────────────
+  llBlock: {
+    border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden",
+  },
+  llBlockHeader: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:4,
+    textTransform:"uppercase", color:"#fff", background:"#555",
+    padding:"12px 18px",
+  },
+  llRow: {
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    padding:"13px 18px", borderBottom:"1px solid #F0F0F0",
+    background:"#FAFAFA", gap:12, flexWrap:"wrap",
+  },
+  llLiftName: { display:"flex", alignItems:"center", gap:10, minWidth:160 },
+  llLiftLabel: { fontSize:15, fontWeight:600, color:"#1A1A1A" },
+  llMotherBadge: {
+    fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
+    color:"#999", background:"#EFEFEF", padding:"3px 8px",
+    borderRadius:4, fontWeight:700,
+  },
+  llInputs: { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
+  llRepsInput: {
+    width:72, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
+    borderRadius:8, color:"#1A1A1A", fontSize:20,
+    fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
+    padding:"8px 6px", textAlign:"center",
+  },
+  llTimes: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc",
+  },
+  llWeightInput: {
+    width:96, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
+    borderRadius:8, color:"#1A1A1A", fontSize:20,
+    fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
+    padding:"8px 6px", textAlign:"center",
+  },
+  llUnitLabel: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:"#bbb", letterSpacing:1,
+  },
+
+  // Results
+  llGroup: { borderBottom:"1px solid #F0F0F0" },
+  llGroupHeader: {
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    padding:"11px 16px", background:"#555", borderBottom:"1px solid #484848",
+  },
+  llGroupLabel: {
+    fontSize:11, letterSpacing:3, textTransform:"uppercase",
+    fontWeight:700, color:"#fff",
+  },
+  llLimitingFlag: {
+    fontSize:12, fontWeight:700, color:"#FFD580", letterSpacing:0.3,
+  },
+  llResultsTable: {},
+  llResultRow: {
+    display:"grid",
+    gridTemplateColumns:"1fr 90px 72px 72px 68px",
+    alignItems:"center",
+    padding:"11px 16px",
+    borderBottom:"1px solid #F5F5F5",
+    background:"#FAFAFA",
+    gap:4,
+  },
+  llResultHeader: {
+    background:"#F0F0F0", padding:"7px 16px",
+    fontSize:10, letterSpacing:2, textTransform:"uppercase",
+    color:"#aaa", fontWeight:700,
+  },
+  llResultLimiting: {
+    background:"#FFF5F5", borderLeft:"3px solid #F44336",
+  },
+  llResultMother: { background:"#F8F8F8" },
+  llColLift: {
+    fontSize:13, fontWeight:600, color:"#1A1A1A",
+    display:"flex", alignItems:"center", gap:6,
+  },
+  llColE1rm: {
+    fontSize:15, fontFamily:"'Bebas Neue',sans-serif",
+    letterSpacing:1, color:"#1A1A1A", textAlign:"right",
+  },
+  llColActual: { fontSize:13, fontWeight:600, textAlign:"right" },
+  llColTarget: { fontSize:13, textAlign:"right" },
+  llColGap:    { fontSize:13, fontWeight:700, textAlign:"right" },
+  llSmallUnit: {
+    fontSize:10, color:"#bbb", marginLeft:2,
+    fontFamily:"'Barlow',sans-serif",
+  },
+  llMotherDot:   { fontSize:8,  color:"#bbb" },
+  llLimitingDot: { fontSize:10 },
+  llLegend: {
+    padding:"12px 16px", fontSize:12, color:"#999",
+    background:"#FAFAFA", borderTop:"1px solid #F0F0F0",
+  },
+  llEmptyState: {
+    marginTop:16, padding:"14px 16px",
+    background:"#F8F8F8", border:"1.5px solid #E8E8E8",
+    borderRadius:10, fontSize:13, color:"#bbb", fontStyle:"italic", lineHeight:1.6,
   },
 
   footer: {
