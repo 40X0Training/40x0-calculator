@@ -186,7 +186,7 @@ export default async function handler(req, res) {
 
   try {
     await resend.emails.send({
-      from: 'onboarding@resend.dev',
+      from: 'aj@40x0training.com',
       to,
       subject: '40X0 Training — Your Results',
       html,
