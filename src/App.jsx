@@ -1293,7 +1293,7 @@ const s = {
 
   // ── Floating email button ─────────────────────────────────────
   fab: {
-    position:"fixed", bottom:28, left:20,
+    position:"fixed", bottom:28, left:"calc(50vw - 290px)",
     width:52, height:52,
     background:"#fff", border:"1.5px solid #1A1A1A",
     borderRadius:"50%", cursor:"pointer",
