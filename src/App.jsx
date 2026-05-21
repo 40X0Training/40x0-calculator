@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-// ── Continuum table (extended to 20 reps) ────────────────────────
+// ── Continuum table ───────────────────────────────────────────────
 const PCT = {
   1:1.00, 2:0.94, 3:0.90, 4:0.88, 5:0.85, 6:0.83, 7:0.80, 8:0.78,
   9:0.76, 10:0.74, 11:0.72, 12:0.70, 13:0.68, 14:0.67, 15:0.66,
@@ -21,12 +21,13 @@ const PHASE = [
 
 const PRESETS = [
   "Back Squat","Front Squat","Deadlift","Bench Press",
-  "Incline Press","OHP","Dips","Chin-up",
+  "Incline Press","Overhead Press","Dips","Chin-up",
 ];
 
 const MAX_COMPLEX_SLOTS = 8;
+const MAX_EXERCISES     = 8;
 
-// ── Limiting Lift System ─────────────────────────────────────────
+// ── Limiting Lift System ──────────────────────────────────────────
 const LIFT_DEFS = [
   { key:"bench",    label:"Bench Press",        group:"upper", motherKey:null,    targetRatio:null },
   { key:"ohp",      label:"Overhead Press",      group:"upper", motherKey:"bench", targetRatio:0.72 },
@@ -48,18 +49,16 @@ function calcLimitingLifts(inputs) {
   }
   const results = LIFT_DEFS.map(def => {
     const e1rm = e1rms[def.key] ?? null;
-    if (def.motherKey === null) {
-      return { ...def, e1rm, actualRatio: null, gap: null };
-    }
-    const motherE1rm = e1rms[def.motherKey] ?? null;
+    if (def.motherKey === null) return { ...def, e1rm, actualRatio:null, gap:null };
+    const motherE1rm  = e1rms[def.motherKey] ?? null;
     const actualRatio = (e1rm && motherE1rm) ? e1rm / motherE1rm : null;
-    const gap = (actualRatio !== null) ? actualRatio - def.targetRatio : null;
+    const gap         = (actualRatio !== null) ? actualRatio - def.targetRatio : null;
     return { ...def, e1rm, actualRatio, gap };
   });
   for (const group of ["upper","lower"]) {
-    const dependents = results.filter(r => r.group === group && r.motherKey !== null && r.gap !== null);
+    const dependents  = results.filter(r => r.group === group && r.motherKey !== null && r.gap !== null);
     if (dependents.length === 0) continue;
-    const mostNegative = dependents.reduce((a, b) => (a.gap < b.gap ? a : b));
+    const mostNegative = dependents.reduce((a,b) => a.gap < b.gap ? a : b);
     if (mostNegative.gap < 0) mostNegative.isLimiting = true;
   }
   return results;
@@ -126,6 +125,25 @@ function buildWarmup(bottomSetWeight, micro) {
 
 const COL = { set:46, reps:72, weight:120 };
 
+// ── Default exercise state factory ───────────────────────────────
+function makeExercise(overrides = {}) {
+  return {
+    id:           Date.now() + Math.random(),
+    weight:       "",
+    topReps:      "",
+    exercise:     "",
+    customEx:     "",
+    showCustom:   false,
+    micro:        true,
+    targetReps:   "",
+    targetSets:   "",
+    mode:         "standard",
+    complexSlots: Array(MAX_COMPLEX_SLOTS).fill(""),
+    collapsed:    false,
+    ...overrides,
+  };
+}
+
 // ── Components ────────────────────────────────────────────────────
 function Toggle({ options, value, onChange }) {
   return (
@@ -140,16 +158,11 @@ function Toggle({ options, value, onChange }) {
   );
 }
 
-function Section({ num, title, children, show }) {
-  if (!show) return null;
+function ClearBtn({ onClick }) {
   return (
-    <div style={s.section}>
-      <div style={s.sectionHead}>
-        <div style={s.sectionNumBig}>{num}</div>
-        <div style={s.sectionTitle}>{title}</div>
-      </div>
-      <div>{children}</div>
-    </div>
+    <button onClick={onClick} style={s.clearBtn}>
+      Clear
+    </button>
   );
 }
 
@@ -181,8 +194,8 @@ function WarmupBlock({ bottomSetWeight, unit, micro }) {
           {warmup.map(wu => (
             <div key={wu.setNum} style={s.warmupRow}>
               <span style={{...s.warmupSetLabel, width:COL.set}}>Set {wu.setNum}</span>
-              <span style={{...s.warmupReps, width:COL.reps}}>{wu.reps} Reps</span>
-              <span style={{...s.warmupWeight, width:COL.weight}}>
+              <span style={{...s.warmupReps,     width:COL.reps}}>{wu.reps} Reps</span>
+              <span style={{...s.warmupWeight,   width:COL.weight}}>
                 {fmt(wu.weight)}<span style={s.warmupUnit}>{unit}</span>
               </span>
             </div>
@@ -231,7 +244,7 @@ function ComplexSetList({ sets, unit }) {
       {sets.map((set, i) => (
         <div key={i} style={{...s.ladderRow, ...s.lMid}}>
           <span style={{...s.lSetLabel, width:COL.set}}>Set {i + 1}</span>
-          <span style={{...s.lReps, width:COL.reps}}>{set.repCount} Reps</span>
+          <span style={{...s.lReps,     width:COL.reps}}>{set.repCount} Reps</span>
           <span style={{...s.lWeightFixed, width:COL.weight}}>
             {fmt(set.weight)}<span style={s.lUnit}>{unit}</span>
           </span>
@@ -294,7 +307,7 @@ function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
   const [pct, setPct] = useState(phase.defaultPct);
   const phasedSets = complexSets.map(set => ({
     repCount: set.repCount,
-    weight: roundStep(set.weightRaw * (1 + pct), micro),
+    weight:   roundStep(set.weightRaw * (1 + pct), micro),
   }));
   const bottomSet = phasedSets.length > 0
     ? Math.min(...phasedSets.map(s => s.weight))
@@ -319,9 +332,6 @@ function ComplexPhaseCard({ phase, complexSets, unit, micro }) {
 function ComplexInput({ slots, onChange }) {
   return (
     <div style={s.complexWrap}>
-      <label style={s.label}>
-        Rep Scheme <span style={s.hint}>(enter reps per set, left to right)</span>
-      </label>
       <div style={s.complexGrid}>
         {slots.map((val, i) => (
           <div key={i} style={s.complexSlot}>
@@ -340,6 +350,335 @@ function ComplexInput({ slots, onChange }) {
         ))}
       </div>
       <div style={s.complexHintText}>1–15 reps per set · leave unused slots blank</div>
+    </div>
+  );
+}
+
+// ── Collapsed exercise summary bar ───────────────────────────────
+function ExerciseBar({ ex, index, unit, onExpand, onRemove }) {
+  const w   = parseFloat(ex.weight);
+  const r   = parseInt(ex.topReps);
+  const e1rmRaw     = (w > 0 && r >= 1) ? calcE1RM(w, r) : null;
+  const e1rmDisplay = e1rmRaw ? roundDisplay(e1rmRaw) : null;
+  const label = ex.showCustom ? (ex.customEx || "Exercise") : (ex.exercise || "Exercise");
+
+  let prescription = "";
+  if (ex.mode === "standard") {
+    const ts = parseInt(ex.targetSets);
+    const tr = parseInt(ex.targetReps);
+    if (ts >= 2 && tr >= 1) prescription = `${ts}×${tr}`;
+  } else {
+    const reps = parseComplex(ex.complexSlots);
+    if (reps.length > 0) prescription = reps.join(",");
+  }
+
+  return (
+    <div style={s.exBar}>
+      <div style={s.exBarLeft}>
+        <div style={s.exBarNum}>{index + 1}</div>
+        <div>
+          <div style={s.exBarName}>{label}</div>
+          {prescription && (
+            <div style={s.exBarMeta}>
+              {prescription}
+              {e1rmDisplay ? ` · ES1RM: ${fmt(e1rmDisplay)}${unit}` : ""}
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={s.exBarRight}>
+        <button onClick={onExpand} style={s.exBarExpandBtn}>Edit ▼</button>
+        <button onClick={onRemove} style={s.exBarRemoveBtn}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Single exercise panel (Steps 01–03) ──────────────────────────
+function ExercisePanel({ ex, unit, onChange, isOnly }) {
+  const update = (key, val) => onChange({ ...ex, [key]: val });
+
+  const w  = parseFloat(ex.weight);
+  const r  = parseInt(ex.topReps);
+  const tr = parseInt(ex.targetReps);
+  const ts = parseInt(ex.targetSets);
+
+  const hasWeight = w && w > 0;
+  const hasReps   = r && r >= 1 && r <= 20;
+  const hasTarget = tr && tr >= 1 && tr <= 20;
+  const hasSets   = ts && ts >= 2 && ts <= 12;
+
+  const e1rmRaw     = (hasWeight && hasReps) ? calcE1RM(w, r) : null;
+  const e1rmDisplay = e1rmRaw ? roundDisplay(e1rmRaw) : null;
+
+  const esRepMaxRaw     = (e1rmRaw && hasTarget) ? calcRepMax(e1rmRaw, tr) : null;
+  const esRepMaxDisplay = esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null;
+
+  const ladder = (esRepMaxRaw && hasSets)
+    ? buildLadder(esRepMaxRaw, ts, ex.micro)
+    : null;
+
+  const complexReps = parseComplex(ex.complexSlots);
+  const hasComplex  = complexReps.length > 0 && e1rmRaw;
+  const complexSets = hasComplex
+    ? complexReps.map(rep => ({
+        repCount:  rep,
+        weightRaw: calcRepMax(e1rmRaw, rep),
+        weight:    roundStep(calcRepMax(e1rmRaw, rep), ex.micro),
+      }))
+    : [];
+
+  const exLabel      = ex.showCustom ? (ex.customEx || "") : ex.exercise;
+  const canShowPhase = ex.mode === "standard"
+    ? (!!esRepMaxDisplay && hasSets)
+    : hasComplex;
+
+  const clearStep01 = () => onChange({ ...ex, weight:"", topReps:"" });
+  const clearStep02 = () => ex.mode === "standard"
+    ? onChange({ ...ex, targetSets:"", targetReps:"" })
+    : onChange({ ...ex, complexSlots: Array(MAX_COMPLEX_SLOTS).fill("") });
+
+  return (
+    <div style={s.exercisePanel}>
+
+      {/* ── STEP 01 ── */}
+      <div style={s.epSection}>
+        <div style={s.epSectionHead}>
+          <div style={s.epSectionNum}>01</div>
+          <div style={s.epSectionTitle}>Find Your Estimated 1-Rep Max</div>
+        </div>
+
+        <div style={s.rowWrap}>
+          <div style={s.field}>
+            <label style={s.label}>Unit</label>
+            <Toggle
+              value={unit} onChange={() => {}}
+              options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
+            />
+          </div>
+          <div style={s.field}>
+            <label style={s.label}>Have Micro Plates?</label>
+            <Toggle
+              value={ex.micro ? "yes" : "no"}
+              onChange={v => update("micro", v === "yes")}
+              options={[{ value:"yes", label:"Yes" }, { value:"no", label:"No" }]}
+            />
+          </div>
+        </div>
+
+        <div style={s.field}>
+          <label style={s.label}>
+            Exercise <span style={s.hint}>(optional — label only)</span>
+          </label>
+          <div style={s.exGrid}>
+            {PRESETS.map(p => (
+              <button key={p}
+                onClick={() => onChange({ ...ex, exercise:p, showCustom:false })}
+                style={{ ...s.exBtn, ...(!ex.showCustom && ex.exercise === p ? s.exBtnOn : {}) }}>
+                {p}
+              </button>
+            ))}
+            <button
+              onClick={() => onChange({ ...ex, showCustom:true })}
+              style={{ ...s.exBtn, ...(ex.showCustom ? s.exBtnOn : {}), gridColumn:"span 2" }}>
+              + Custom
+            </button>
+          </div>
+          {ex.showCustom && (
+            <input placeholder="Exercise name…" value={ex.customEx}
+              onChange={e => update("customEx", e.target.value)}
+              style={{ ...s.textInput, marginTop:8 }} />
+          )}
+        </div>
+
+        {/* Top Set input row + Clear */}
+        <div style={s.field}>
+          <div style={s.labelClearRow}>
+            <label style={{...s.label, marginBottom:0}}>Top Set</label>
+            <ClearBtn onClick={clearStep01} />
+          </div>
+          <div style={{...s.inputRow, marginTop:8}}>
+            <div style={s.inputGroup}>
+              <input
+                type="number" min="1" placeholder="100"
+                value={ex.weight}
+                onChange={e => update("weight", e.target.value)}
+                className="no-spinner"
+                style={s.bigInput}
+              />
+              <span style={s.inputLabel}>{unit}</span>
+            </div>
+            <span style={s.timesSymbol}>×</span>
+            <div style={s.inputGroup}>
+              <input
+                type="number" min="1" max="20" placeholder="5"
+                value={ex.topReps}
+                onChange={e => update("topReps", e.target.value)}
+                className="no-spinner"
+                style={s.bigInput}
+              />
+              <span style={s.inputLabel}>Reps</span>
+            </div>
+          </div>
+        </div>
+
+        {e1rmDisplay && (
+          <BigResult
+            sublabel={
+              exLabel
+                ? `${exLabel} · ${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
+                : `${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
+            }
+            label="Estimated 1-Rep Max"
+            value={fmt(e1rmDisplay)}
+            unit={unit}
+          />
+        )}
+      </div>
+
+      {/* ── STEP 02 ── */}
+      {e1rmDisplay && (
+        <div style={s.epSection}>
+          <div style={s.epSectionHead}>
+            <div style={s.epSectionNum}>02</div>
+            <div style={s.epSectionTitle}>New Mesocycle Sets × Reps</div>
+          </div>
+
+          {/* Mode toggle row + Clear */}
+          <div style={s.field}>
+            <div style={s.labelClearRow}>
+              <label style={{...s.label, marginBottom:0}}>Rep Scheme Type</label>
+              <ClearBtn onClick={clearStep02} />
+            </div>
+            <div style={{marginTop:8}}>
+              <Toggle
+                value={ex.mode}
+                onChange={v => update("mode", v)}
+                options={[
+                  { value:"standard", label:"Standard Reps" },
+                  { value:"complex",  label:"Complex Reps"  },
+                ]}
+              />
+            </div>
+          </div>
+
+          {ex.mode === "standard" && (
+            <>
+              <p style={s.desc}>
+                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your target sets and reps.
+              </p>
+              <div style={s.field}>
+                <label style={s.label}>Target Sets × Reps</label>
+                <div style={s.inputRow}>
+                  <div style={s.inputGroup}>
+                    <input
+                      type="number" min="2" max="12" placeholder="Sets"
+                      value={ex.targetSets}
+                      onChange={e => update("targetSets", e.target.value)}
+                      style={s.step2Input}
+                    />
+                    <span style={s.inputLabel}>Sets</span>
+                  </div>
+                  <span style={s.timesSymbol}>×</span>
+                  <div style={s.inputGroup}>
+                    <input
+                      type="number" min="1" max="20" placeholder="Reps"
+                      value={ex.targetReps}
+                      onChange={e => update("targetReps", e.target.value)}
+                      style={s.step2Input}
+                    />
+                    <span style={s.inputLabel}>Reps</span>
+                  </div>
+                </div>
+              </div>
+              {esRepMaxDisplay && (
+                <BigResult
+                  label={`Estimated ${tr}-Rep Max`}
+                  value={fmt(esRepMaxDisplay)}
+                  unit={unit}
+                />
+              )}
+              {ladder && (
+                <div style={{ marginTop:20 }}>
+                  <div style={s.ladderMeta}>
+                    <strong>{ts} sets</strong> · Spread: <strong>{Math.round((STEP_PCT[ts] ?? 0.10) * 100)}%</strong>
+                    {" · "}Bottom: <strong>{fmt(ladder[0])}{unit}</strong>
+                    {" · "}Top: <strong>{fmt(ladder[ladder.length-1])}{unit}</strong>
+                  </div>
+                  <Ladder steps={ladder} targetReps={tr} unit={unit} />
+                </div>
+              )}
+            </>
+          )}
+
+          {ex.mode === "complex" && (
+            <>
+              <p style={s.desc}>
+                Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your rep scheme.
+              </p>
+              <ComplexInput
+                slots={ex.complexSlots}
+                onChange={v => update("complexSlots", v)}
+              />
+              {hasComplex && (
+                <div style={{ ...s.bigResult, marginTop:16 }}>
+                  <div style={s.bigResultLabel}>Rep Scheme Weights</div>
+                  <ComplexSetList sets={complexSets} unit={unit} />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── STEP 03 ── */}
+      {canShowPhase && (
+        <div style={s.epSection}>
+          <div style={s.epSectionHead}>
+            <div style={s.epSectionNum}>03</div>
+            <div style={s.epSectionTitle}>3-Week Phase Plan</div>
+          </div>
+
+          {ex.mode === "standard" && (
+            <>
+              <p style={s.desc}>
+                Each week adjusts from your ES{tr}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
+                Adjust percentages and sets per week as needed.
+              </p>
+              <div style={s.phaseGrid}>
+                {PHASE.map(ph => (
+                  <PhaseCard
+                    key={ph.week} phase={ph}
+                    esRepMaxRaw={esRepMaxRaw}
+                    defaultSets={ts} targetReps={tr}
+                    unit={unit} micro={ex.micro}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {ex.mode === "complex" && hasComplex && (
+            <>
+              <p style={s.desc}>
+                Each week applies phase percentages to each set individually.
+              </p>
+              <div style={s.phaseGrid}>
+                {PHASE.map(ph => (
+                  <ComplexPhaseCard
+                    key={ph.week} phase={ph}
+                    complexSets={complexSets}
+                    unit={unit} micro={ex.micro}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* ── Add Exercise Buttons ── */}
+        </div>
+      )}
+
     </div>
   );
 }
@@ -382,9 +721,7 @@ function LimitingLiftResults({ results, unit }) {
       <div style={s.llGroup}>
         <div style={s.llGroupHeader}>
           <span style={s.llGroupLabel}>{groupLabel}</span>
-          {limiting && (
-            <span style={s.llLimitingFlag}>Limiting: {limiting.label}</span>
-          )}
+          {limiting && <span style={s.llLimitingFlag}>Limiting: {limiting.label}</span>}
         </div>
         <div style={s.llResultsTable}>
           <div style={{ ...s.llResultRow, ...s.llResultHeader }}>
@@ -432,7 +769,6 @@ function LimitingLiftResults({ results, unit }) {
       </div>
     );
   }
-
   const upper = results.filter(r => r.group === "upper");
   const lower = results.filter(r => r.group === "lower");
   return (
@@ -450,8 +786,8 @@ function LimitingLiftResults({ results, unit }) {
 
 // ── Email Modal ───────────────────────────────────────────────────
 function EmailModal({ onClose, emailData }) {
-  const [email,   setEmail]   = useState("");
-  const [status,  setStatus]  = useState("idle"); // idle | sending | sent | error
+  const [email,  setEmail]  = useState("");
+  const [status, setStatus] = useState("idle");
 
   const handleSend = async () => {
     if (!email || !email.includes("@")) return;
@@ -462,11 +798,7 @@ function EmailModal({ onClose, emailData }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to: email, data: emailData }),
       });
-      if (res.ok) {
-        setStatus("sent");
-      } else {
-        setStatus("error");
-      }
+      setStatus(res.ok ? "sent" : "error");
     } catch {
       setStatus("error");
     }
@@ -475,17 +807,13 @@ function EmailModal({ onClose, emailData }) {
   return (
     <div style={s.modalOverlay} onClick={onClose}>
       <div style={s.modalBox} onClick={e => e.stopPropagation()}>
-        {/* Close button */}
         <button onClick={onClose} style={s.modalClose}>✕</button>
-
-        {/* Icon */}
         <div style={s.modalIcon}>
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
             <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2" fill="none"/>
             <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2" fill="none"/>
           </svg>
         </div>
-
         {status === "sent" ? (
           <>
             <div style={s.modalTitle}>Results Sent!</div>
@@ -496,15 +824,12 @@ function EmailModal({ onClose, emailData }) {
           <>
             <div style={s.modalTitle}>Email Me My Results</div>
             <div style={s.modalDesc}>
-              We'll send your ES1RM, step loading, phase plan, and limiting lift analysis to your inbox.
+              We'll send your ES1RM, step loading, and phase plan for all exercises to your inbox.
             </div>
             <input
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              style={s.modalInput}
-              autoFocus
+              type="email" placeholder="your@email.com"
+              value={email} onChange={e => setEmail(e.target.value)}
+              style={s.modalInput} autoFocus
             />
             {status === "error" && (
               <div style={s.modalError}>Something went wrong — please try again.</div>
@@ -530,21 +855,13 @@ function EmailModal({ onClose, emailData }) {
 const EMPTY_LIFT = { reps: "", weight: "" };
 
 export default function App() {
-  const [activeTab,    setActiveTab]    = useState("planner");
-  const [showModal,    setShowModal]    = useState(false);
+  const [activeTab, setActiveTab] = useState("planner");
+  const [showModal, setShowModal] = useState(false);
+  const [unit,      setUnit]      = useState("lbs");
 
-  // Planner state
-  const [weight,       setWeight]       = useState("");
-  const [topReps,      setTopReps]      = useState("");
-  const [unit,         setUnit]         = useState("lbs");
-  const [exercise,     setExercise]     = useState("");
-  const [customEx,     setCustomEx]     = useState("");
-  const [showCustom,   setShowCustom]   = useState(false);
-  const [micro,        setMicro]        = useState(true);
-  const [targetReps,   setTargetReps]   = useState("");
-  const [targetSets,   setTargetSets]   = useState("");
-  const [mode,         setMode]         = useState("standard");
-  const [complexSlots, setComplexSlots] = useState(Array(MAX_COMPLEX_SLOTS).fill(""));
+  // Multi-exercise list
+  const [exercises,      setExercises]      = useState([makeExercise()]);
+  const [activeExIndex,  setActiveExIndex]  = useState(0);
 
   // Limiting lift state
   const [llUnit,   setLlUnit]   = useState("lbs");
@@ -554,94 +871,136 @@ export default function App() {
   const setLLInput = (key, val) =>
     setLLInputs(prev => ({ ...prev, [key]: val }));
 
-  // Planner calcs
-  const w  = parseFloat(weight);
-  const r  = parseInt(topReps);
-  const tr = parseInt(targetReps);
-  const ts = parseInt(targetSets);
+  // ── Exercise list helpers ────────────────────────────────────────
+  const updateExercise = (index, updated) => {
+    setExercises(prev => prev.map((ex, i) => i === index ? updated : ex));
+  };
 
-  const hasWeight = w && w > 0;
-  const hasReps   = r && r >= 1 && r <= 15;
-  const hasTarget = tr && tr >= 1 && tr <= 15;
-  const hasSets   = ts && ts >= 2 && ts <= 12;
+  const collapseExercise = (index) => {
+    setExercises(prev => prev.map((ex, i) => i === index ? { ...ex, collapsed:true } : ex));
+  };
 
-  const e1rmRaw     = (hasWeight && hasReps) ? calcE1RM(w, r) : null;
-  const e1rmDisplay = e1rmRaw ? roundDisplay(e1rmRaw) : null;
+  const expandExercise = (index) => {
+    setExercises(prev => prev.map((ex, i) => ({ ...ex, collapsed: i === index ? false : ex.collapsed })));
+    setActiveExIndex(index);
+  };
 
-  const esRepMaxRaw     = (e1rmRaw && hasTarget) ? calcRepMax(e1rmRaw, tr) : null;
-  const esRepMaxDisplay = esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null;
+  const removeExercise = (index) => {
+    setExercises(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length === 0 ? [makeExercise()] : next;
+    });
+    setActiveExIndex(prev => Math.max(0, prev > index ? prev - 1 : prev));
+  };
 
-  const ladder = (esRepMaxRaw && hasSets)
-    ? buildLadder(esRepMaxRaw, ts, micro)
-    : null;
+  const addExercise = (keepPrescription) => {
+    const current = exercises[activeExIndex];
+    collapseExercise(activeExIndex);
+    const newEx = makeExercise(keepPrescription ? {
+      micro:        current.micro,
+      mode:         current.mode,
+      targetReps:   current.targetReps,
+      targetSets:   current.targetSets,
+      complexSlots: [...current.complexSlots],
+    } : {
+      micro: current.micro,
+    });
+    setExercises(prev => [...prev, newEx]);
+    setActiveExIndex(exercises.length);
+  };
 
-  const complexReps = parseComplex(complexSlots);
-  const hasComplex  = complexReps.length > 0 && e1rmRaw;
-  const complexSets = hasComplex
-    ? complexReps.map(rep => ({
-        repCount:  rep,
-        weightRaw: calcRepMax(e1rmRaw, rep),
-        weight:    roundStep(calcRepMax(e1rmRaw, rep), micro),
-      }))
-    : [];
+  // ── Email payload ────────────────────────────────────────────────
+  const buildEmailData = () => {
+    const exerciseResults = exercises.map(ex => {
+      const w  = parseFloat(ex.weight);
+      const r  = parseInt(ex.topReps);
+      const tr = parseInt(ex.targetReps);
+      const ts = parseInt(ex.targetSets);
+      const hasWeight = w && w > 0;
+      const hasReps   = r && r >= 1;
+      const hasTarget = tr && tr >= 1;
+      const hasSets   = ts && ts >= 2;
+      const e1rmRaw     = (hasWeight && hasReps) ? calcE1RM(w, r) : null;
+      const e1rmDisplay = e1rmRaw ? roundDisplay(e1rmRaw) : null;
+      const esRepMaxRaw = (e1rmRaw && hasTarget) ? calcRepMax(e1rmRaw, tr) : null;
+      const ladder = (esRepMaxRaw && hasSets) ? buildLadder(esRepMaxRaw, ts, ex.micro) : [];
+      const exLabel = ex.showCustom ? (ex.customEx || null) : (ex.exercise || null);
+      const weeks = PHASE.map(ph => {
+        const topSetRaw = esRepMaxRaw ? esRepMaxRaw * (1 + ph.defaultPct) : null;
+        return {
+          label:   ph.label,
+          tag:     ph.tag,
+          topSet:  topSetRaw ? roundHalf(topSetRaw) : null,
+          sets:    ts || 0,
+          reps:    tr || 0,
+          ladder:  (topSetRaw && hasSets) ? buildLadder(topSetRaw, ts, ex.micro) : [],
+        };
+      });
+      return {
+        exercise:   exLabel,
+        weight:     w || null,
+        topReps:    r || null,
+        unit,
+        micro:      ex.micro,
+        e1rm:       e1rmDisplay,
+        esRepMax:   esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null,
+        targetReps: tr || null,
+        targetSets: ts || null,
+        mode:       ex.mode,
+        ladder,
+        weeks:      ex.mode === "standard" ? weeks : [],
+      };
+    });
 
-  const exLabel      = showCustom ? (customEx || "") : exercise;
-  const canShowPhase = mode === "standard"
-    ? (!!esRepMaxDisplay && hasSets)
-    : hasComplex;
+    const llParsed = Object.fromEntries(
+      LIFT_DEFS.map(d => {
+        const inp  = llInputs[d.key];
+        const reps = parseInt(inp.reps);
+        const wt   = parseFloat(inp.weight);
+        return [d.key, (reps >= 1 && reps <= 20 && wt > 0) ? { reps, weight:wt } : null];
+      })
+    );
+    const hasAnyLL = (llParsed["bench"] || llParsed["squat"]);
+    return {
+      exercises: exerciseResults,
+      llResults: hasAnyLL ? calcLimitingLifts(llParsed) : [],
+    };
+  };
 
-  // Limiting lift calcs
-  const llParsed = Object.fromEntries(
+  // ── Whether to show email FAB ────────────────────────────────────
+  const anyE1rm = exercises.some(ex => {
+    const w = parseFloat(ex.weight);
+    const r = parseInt(ex.topReps);
+    return w > 0 && r >= 1;
+  });
+
+  // ── Active exercise calcs for Add Exercise buttons ───────────────
+  const activeEx = exercises[activeExIndex] ?? exercises[0];
+  const activeW  = parseFloat(activeEx?.weight);
+  const activeR  = parseInt(activeEx?.topReps);
+  const activeTr = parseInt(activeEx?.targetReps);
+  const activeTs = parseInt(activeEx?.targetSets);
+  const activeE1rm = (activeW > 0 && activeR >= 1) ? calcE1RM(activeW, activeR) : null;
+  const activeHasPhase = activeEx?.mode === "standard"
+    ? (!!activeE1rm && activeTr >= 1 && activeTs >= 2)
+    : (parseComplex(activeEx?.complexSlots ?? []).length > 0 && !!activeE1rm);
+
+  const llParsedCheck = Object.fromEntries(
     LIFT_DEFS.map(d => {
       const inp  = llInputs[d.key];
       const reps = parseInt(inp.reps);
       const wt   = parseFloat(inp.weight);
-      return [d.key, (reps >= 1 && reps <= 20 && wt > 0) ? { reps, weight: wt } : null];
+      return [d.key, (reps >= 1 && reps <= 20 && wt > 0) ? { reps, weight:wt } : null];
     })
   );
-  const hasUpperLL = llParsed["bench"] && LIFT_DEFS
+  const hasUpperLL = llParsedCheck["bench"] && LIFT_DEFS
     .filter(d => d.group === "upper" && d.motherKey)
-    .some(d => llParsed[d.key]);
-  const hasLowerLL = llParsed["squat"] && LIFT_DEFS
+    .some(d => llParsedCheck[d.key]);
+  const hasLowerLL = llParsedCheck["squat"] && LIFT_DEFS
     .filter(d => d.group === "lower" && d.motherKey)
-    .some(d => llParsed[d.key]);
+    .some(d => llParsedCheck[d.key]);
   const hasAnyLL  = hasUpperLL || hasLowerLL;
-  const llResults = hasAnyLL ? calcLimitingLifts(llParsed) : null;
-
-  // Show floating button once ES1RM is calculated
-  const showEmailBtn = !!e1rmDisplay || hasAnyLL;
-
-  // Build email data payload
-  const buildEmailData = () => {
-    const weeks = PHASE.map(ph => {
-      const topSetRaw = esRepMaxRaw ? esRepMaxRaw * (1 + ph.defaultPct) : null;
-      return {
-        label:    ph.label,
-        tag:      ph.tag,
-        pctLabel: ph.defaultPct >= 0
-          ? `+${(ph.defaultPct * 100).toFixed(1)}% vs ES rep max`
-          : `${(ph.defaultPct * 100).toFixed(1)}% vs ES rep max`,
-        topSet: topSetRaw ? roundHalf(topSetRaw) : null,
-        sets:   ts || 0,
-        reps:   tr || 0,
-        ladder: (topSetRaw && hasSets) ? buildLadder(topSetRaw, ts, micro) : [],
-      };
-    });
-
-    return {
-      exercise:   exLabel || null,
-      weight:     w || null,
-      topReps:    r || null,
-      unit,
-      micro,
-      e1rm:       e1rmDisplay,
-      esRepMax:   esRepMaxDisplay,
-      targetReps: tr || null,
-      ladder:     ladder || [],
-      weeks:      canShowPhase && mode === "standard" ? weeks : [],
-      llResults:  llResults || [],
-    };
-  };
+  const llResults = hasAnyLL ? calcLimitingLifts(llParsedCheck) : null;
 
   return (
     <div style={s.root}>
@@ -662,229 +1021,106 @@ export default function App() {
           </p>
         </header>
 
-        {/* ── TAB BUTTONS ── */}
+        {/* TAB BAR */}
         <div style={s.tabBar}>
-          <button
-            onClick={() => setActiveTab("planner")}
-            style={{ ...s.tabBtn, ...(activeTab === "planner" ? s.tabBtnOn : {}) }}
-          >
+          <button onClick={() => setActiveTab("planner")}
+            style={{ ...s.tabBtn, ...(activeTab === "planner" ? s.tabBtnOn : {}) }}>
             1RM &amp; Load Planner
           </button>
-          <button
-            onClick={() => setActiveTab("limiting")}
-            style={{ ...s.tabBtn, ...(activeTab === "limiting" ? s.tabBtnOn : {}) }}
-          >
+          <button onClick={() => setActiveTab("limiting")}
+            style={{ ...s.tabBtn, ...(activeTab === "limiting" ? s.tabBtnOn : {}) }}>
             Limiting Lift Calculator
           </button>
         </div>
 
-        {/* ══ TAB 1 ══ */}
+        {/* ══ TAB 1: PLANNER ══ */}
         {activeTab === "planner" && (
           <>
-            <Section num="01" title="Find Your Estimated 1-Rep Max" show>
-              <div style={s.rowWrap}>
-                <div style={s.field}>
-                  <label style={s.label}>Unit</label>
-                  <Toggle
-                    value={unit} onChange={setUnit}
-                    options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
-                  />
-                </div>
-                <div style={s.field}>
-                  <label style={s.label}>Have Micro Plates?</label>
-                  <Toggle
-                    value={micro ? "yes" : "no"}
-                    onChange={v => setMicro(v === "yes")}
-                    options={[{ value:"yes", label:"Yes" }, { value:"no", label:"No" }]}
-                  />
-                </div>
-              </div>
+            {/* Unit selector — shared across all exercises */}
+            <div style={s.globalUnitRow}>
+              <span style={s.globalUnitLabel}>Unit</span>
+              <Toggle
+                value={unit} onChange={setUnit}
+                options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
+              />
+            </div>
 
-              <div style={s.field}>
-                <label style={s.label}>
-                  Exercise <span style={s.hint}>(optional — label only)</span>
-                </label>
-                <div style={s.exGrid}>
-                  {PRESETS.map(p => (
-                    <button key={p}
-                      onClick={() => { setExercise(p); setShowCustom(false); }}
-                      style={{ ...s.exBtn, ...(!showCustom && exercise === p ? s.exBtnOn : {}) }}>
-                      {p}
-                    </button>
-                  ))}
-                  <button onClick={() => setShowCustom(true)}
-                    style={{ ...s.exBtn, ...(showCustom ? s.exBtnOn : {}), gridColumn:"span 2" }}>
-                    + Custom
-                  </button>
-                </div>
-                {showCustom && (
-                  <input placeholder="Exercise name…" value={customEx}
-                    onChange={e => setCustomEx(e.target.value)}
-                    style={{ ...s.textInput, marginTop:8 }} />
-                )}
-              </div>
-
-              <div style={s.field}>
-                <label style={s.label}>Top Set</label>
-                <div style={s.inputRow}>
-                  <div style={s.inputGroup}>
-                    <input
-                      type="number" min="1" placeholder="100"
-                      value={weight}
-                      onChange={e => setWeight(e.target.value)}
-                      className="no-spinner"
-                      style={s.bigInput}
-                    />
-                    <span style={s.inputLabel}>{unit}</span>
-                  </div>
-                  <span style={s.timesSymbol}>×</span>
-                  <div style={s.inputGroup}>
-                    <input
-                      type="number" min="1" max="15" placeholder="5"
-                      value={topReps}
-                      onChange={e => setTopReps(e.target.value)}
-                      className="no-spinner"
-                      style={s.bigInput}
-                    />
-                    <span style={s.inputLabel}>Reps</span>
-                  </div>
-                </div>
-              </div>
-
-              {e1rmDisplay && (
-                <BigResult
-                  sublabel={
-                    exLabel
-                      ? `${exLabel} · ${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
-                      : `${fmt(w)}${unit} × ${r} rep${r > 1 ? "s" : ""}`
-                  }
-                  label="Estimated 1-Rep Max"
-                  value={fmt(e1rmDisplay)}
+            {/* Collapsed exercise bars */}
+            {exercises.filter(ex => ex.collapsed).map((ex, _) => {
+              const realIdx = exercises.indexOf(ex);
+              return (
+                <ExerciseBar
+                  key={ex.id}
+                  ex={ex}
+                  index={realIdx}
                   unit={unit}
+                  onExpand={() => expandExercise(realIdx)}
+                  onRemove={() => removeExercise(realIdx)}
                 />
-              )}
-            </Section>
+              );
+            })}
 
-            <Section num="02" title="New Mesocycle Sets × Reps" show={!!e1rmDisplay}>
-              <div style={s.field}>
-                <label style={s.label}>Rep Scheme Type</label>
-                <Toggle
-                  value={mode} onChange={setMode}
-                  options={[
-                    { value:"standard", label:"Standard Reps" },
-                    { value:"complex",  label:"Complex Reps"  },
-                  ]}
-                />
-              </div>
-
-              {mode === "standard" && (
-                <>
-                  <p style={s.desc}>
-                    Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your target sets and reps.
-                  </p>
-                  <div style={s.field}>
-                    <label style={s.label}>Target Sets × Reps</label>
-                    <div style={s.inputRow}>
-                      <div style={s.inputGroup}>
-                        <input
-                          type="number" min="2" max="12" placeholder="Sets"
-                          value={targetSets}
-                          onChange={e => setTargetSets(e.target.value)}
-                          style={s.step2Input}
-                        />
-                        <span style={s.inputLabel}>Sets</span>
-                      </div>
-                      <span style={s.timesSymbol}>×</span>
-                      <div style={s.inputGroup}>
-                        <input
-                          type="number" min="1" max="15" placeholder="Reps"
-                          value={targetReps}
-                          onChange={e => setTargetReps(e.target.value)}
-                          style={s.step2Input}
-                        />
-                        <span style={s.inputLabel}>Reps</span>
+            {/* Active (expanded) exercise */}
+            {exercises.map((ex, idx) => {
+              if (ex.collapsed) return null;
+              return (
+                <div key={ex.id}>
+                  {exercises.length > 1 && (
+                    <div style={s.exPanelHeader}>
+                      <span style={s.exPanelHeaderNum}>Exercise {idx + 1}</span>
+                      <div style={{ display:"flex", gap:8 }}>
+                        <button onClick={() => collapseExercise(idx)} style={s.exPanelCollapseBtn}>
+                          Collapse ▲
+                        </button>
+                        <button onClick={() => removeExercise(idx)} style={s.exPanelRemoveBtn}>
+                          Remove
+                        </button>
                       </div>
                     </div>
-                  </div>
-                  {esRepMaxDisplay && (
-                    <BigResult
-                      label={`Estimated ${tr}-Rep Max`}
-                      value={fmt(esRepMaxDisplay)}
-                      unit={unit}
-                    />
                   )}
-                  {ladder && (
-                    <div style={{ marginTop:20 }}>
-                      <div style={s.ladderMeta}>
-                        <strong>{ts} sets</strong> · Spread: <strong>{Math.round((STEP_PCT[ts] ?? 0.10) * 100)}%</strong>
-                        {" · "}Bottom: <strong>{fmt(ladder[0])}{unit}</strong>
-                        {" · "}Top: <strong>{fmt(ladder[ladder.length - 1])}{unit}</strong>
+                  <ExercisePanel
+                    ex={ex}
+                    unit={unit}
+                    onChange={updated => updateExercise(idx, updated)}
+                    isOnly={exercises.length === 1}
+                  />
+
+                  {/* Add Exercise buttons — shown below Step 03 when phase is available */}
+                  {activeHasPhase && idx === activeExIndex && exercises.length < MAX_EXERCISES && (
+                    <div style={s.addExWrap}>
+                      <div style={s.addExLabel}>Add Another Exercise</div>
+                      <div style={s.addExBtnRow}>
+                        <button
+                          onClick={() => addExercise(true)}
+                          style={s.addExBtn}
+                        >
+                          <span style={s.addExBtnTitle}>Keep Prescription</span>
+                          <span style={s.addExBtnSub}>Same sets, reps & scheme · new weight</span>
+                        </button>
+                        <button
+                          onClick={() => addExercise(false)}
+                          style={s.addExBtn}
+                        >
+                          <span style={s.addExBtnTitle}>New Prescription</span>
+                          <span style={s.addExBtnSub}>Start fresh from Step 01</span>
+                        </button>
                       </div>
-                      <Ladder steps={ladder} targetReps={tr} unit={unit} />
                     </div>
                   )}
-                </>
-              )}
-
-              {mode === "complex" && (
-                <>
-                  <p style={s.desc}>
-                    Using your <strong>{fmt(e1rmDisplay)}{unit}</strong> ES1RM — enter your rep scheme.
-                  </p>
-                  <ComplexInput slots={complexSlots} onChange={setComplexSlots} />
-                  {hasComplex && (
-                    <div style={{ ...s.bigResult, marginTop:16 }}>
-                      <div style={s.bigResultLabel}>Rep Scheme Weights</div>
-                      <ComplexSetList sets={complexSets} unit={unit} />
-                    </div>
-                  )}
-                </>
-              )}
-            </Section>
-
-            <Section num="03" title="3-Week Phase Plan" show={canShowPhase}>
-              {mode === "standard" && (
-                <>
-                  <p style={s.desc}>
-                    Each week adjusts from your ES{tr}RM of <strong>{fmt(esRepMaxDisplay)}{unit}</strong>.
-                    Adjust percentages and sets per week as needed.
-                  </p>
-                  <div style={s.phaseGrid}>
-                    {PHASE.map(ph => (
-                      <PhaseCard
-                        key={ph.week} phase={ph}
-                        esRepMaxRaw={esRepMaxRaw}
-                        defaultSets={ts} targetReps={tr}
-                        unit={unit} micro={micro}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-              {mode === "complex" && hasComplex && (
-                <>
-                  <p style={s.desc}>
-                    Each week applies phase percentages to each set individually.
-                  </p>
-                  <div style={s.phaseGrid}>
-                    {PHASE.map(ph => (
-                      <ComplexPhaseCard
-                        key={ph.week} phase={ph}
-                        complexSets={complexSets}
-                        unit={unit} micro={micro}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </Section>
+                </div>
+              );
+            })}
           </>
         )}
 
-        {/* ══ TAB 2 ══ */}
+        {/* ══ TAB 2: LIMITING LIFT ══ */}
         {activeTab === "limiting" && (
           <>
-            <Section num="01" title="Enter Lift Data" show>
+            <div style={s.section}>
+              <div style={s.sectionHead}>
+                <div style={s.sectionNumBig}>01</div>
+                <div style={s.sectionTitle}>Enter Lift Data</div>
+              </div>
               <div style={s.rowWrap}>
                 <div style={s.field}>
                   <label style={s.label}>Unit</label>
@@ -924,26 +1160,26 @@ export default function App() {
                   one dependent lift to see the analysis.
                 </div>
               )}
-            </Section>
+            </div>
 
             {hasAnyLL && llResults && (
-              <Section num="02" title="Ratio Analysis" show>
+              <div style={s.section}>
+                <div style={s.sectionHead}>
+                  <div style={s.sectionNumBig}>02</div>
+                  <div style={s.sectionTitle}>Ratio Analysis</div>
+                </div>
                 <LimitingLiftResults results={llResults} unit={llUnit} />
-              </Section>
+              </div>
             )}
           </>
         )}
 
         <div style={s.footer}>40X0 Training · Move Better</div>
 
-        {/* ── FLOATING EMAIL BUTTON ── inside wrap so it works in iframe */}
-        {showEmailBtn && (
-          <button
-            onClick={() => setShowModal(true)}
-            style={s.fab}
-            aria-label="Email my results"
-          >
-            <svg width="22" height="22" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Floating email button */}
+        {anyE1rm && (
+          <button onClick={() => setShowModal(true)} style={s.fab} aria-label="Email my results">
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
               <rect x="2" y="6" width="28" height="20" rx="2" stroke="#1A1A1A" strokeWidth="2.5" fill="none"/>
               <polyline points="2,6 16,18 30,6" stroke="#1A1A1A" strokeWidth="2.5" fill="none" strokeLinejoin="round"/>
             </svg>
@@ -951,12 +1187,8 @@ export default function App() {
         )}
       </div>
 
-      {/* ── EMAIL MODAL ── */}
       {showModal && (
-        <EmailModal
-          onClose={() => setShowModal(false)}
-          emailData={buildEmailData()}
-        />
+        <EmailModal onClose={() => setShowModal(false)} emailData={buildEmailData()} />
       )}
 
       <style>{`
@@ -984,8 +1216,8 @@ const s = {
   },
   wrap: { maxWidth:620, margin:"0 auto", padding:"36px 20px 80px", position:"relative" },
 
-  header: { marginBottom:0, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
-  brand:  { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
+  header:  { marginBottom:0, paddingBottom:24, borderBottom:"2px solid #1A1A1A" },
+  brand:   { fontSize:11, letterSpacing:5, color:"#999", marginBottom:10, fontWeight:700, textTransform:"uppercase" },
   title: {
     fontFamily:"'Bebas Neue',sans-serif",
     fontSize:"clamp(52px,12vw,76px)", lineHeight:0.9,
@@ -1004,6 +1236,17 @@ const s = {
   },
   tabBtnOn: { background:"#1A1A1A", color:"#fff", borderRight:"1px solid #1A1A1A" },
 
+  // Global unit row
+  globalUnitRow: {
+    display:"flex", alignItems:"center", gap:14,
+    paddingTop:20, paddingBottom:4,
+  },
+  globalUnitLabel: {
+    fontSize:10, letterSpacing:2.5, textTransform:"uppercase",
+    color:"#aaa", fontWeight:700,
+  },
+
+  // Section styles (for Limiting Lift tab)
   section:      { borderTop:"1px solid #E8E8E8", paddingTop:32, paddingBottom:32 },
   sectionHead:  { display:"flex", alignItems:"flex-start", gap:16, marginBottom:24 },
   sectionNumBig:{
@@ -1014,9 +1257,111 @@ const s = {
     fontFamily:"'Bebas Neue',sans-serif", fontSize:22,
     letterSpacing:1.5, color:"#1A1A1A", paddingTop:14,
   },
-  desc:  { fontSize:13, color:"#888", marginBottom:18, lineHeight:1.6, fontStyle:"italic" },
-  field: { marginBottom:18 },
-  rowWrap:{ display:"flex", gap:20, flexWrap:"wrap", marginBottom:18 },
+
+  // Exercise panel styles
+  exPanelHeader: {
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    paddingTop:24, paddingBottom:8,
+    borderTop:"2px solid #1A1A1A", marginTop:8,
+  },
+  exPanelHeaderNum: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:18,
+    letterSpacing:3, color:"#1A1A1A", textTransform:"uppercase",
+  },
+  exPanelCollapseBtn: {
+    fontSize:11, letterSpacing:1.5, textTransform:"uppercase",
+    color:"#555", background:"#F0F0F0", border:"1.5px solid #D8D8D8",
+    borderRadius:6, padding:"5px 12px", fontWeight:700, cursor:"pointer",
+  },
+  exPanelRemoveBtn: {
+    fontSize:11, letterSpacing:1.5, textTransform:"uppercase",
+    color:"#C0392B", background:"transparent", border:"1.5px solid #E8D5D5",
+    borderRadius:6, padding:"5px 12px", fontWeight:700, cursor:"pointer",
+  },
+
+  exercisePanel: { paddingBottom:8 },
+
+  epSection: { borderTop:"1px solid #E8E8E8", paddingTop:28, paddingBottom:28 },
+  epSectionHead: { display:"flex", alignItems:"flex-start", gap:14, marginBottom:20 },
+  epSectionNum: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:60, lineHeight:0.82,
+    letterSpacing:2, color:"#1A1A1A", flexShrink:0, userSelect:"none", marginTop:-2,
+  },
+  epSectionTitle: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:20,
+    letterSpacing:1.5, color:"#1A1A1A", paddingTop:12,
+  },
+
+  // Collapsed exercise bar
+  exBar: {
+    display:"flex", alignItems:"center", justifyContent:"space-between",
+    background:"#F5F5F5", border:"1.5px solid #E8E8E8",
+    borderRadius:12, padding:"14px 16px", marginTop:12, gap:12,
+  },
+  exBarLeft: { display:"flex", alignItems:"center", gap:12, minWidth:0 },
+  exBarNum: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:28, lineHeight:1,
+    letterSpacing:2, color:"#ccc", flexShrink:0,
+  },
+  exBarName: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:18, letterSpacing:1,
+    color:"#1A1A1A", lineHeight:1.1,
+  },
+  exBarMeta: {
+    fontSize:11, color:"#999", letterSpacing:0.5, marginTop:3,
+  },
+  exBarRight: { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
+  exBarExpandBtn: {
+    fontSize:11, letterSpacing:1.5, textTransform:"uppercase",
+    color:"#555", background:"#fff", border:"1.5px solid #D8D8D8",
+    borderRadius:6, padding:"6px 12px", fontWeight:700, cursor:"pointer",
+  },
+  exBarRemoveBtn: {
+    fontSize:13, color:"#C0392B", background:"transparent",
+    border:"1.5px solid #E8D5D5", borderRadius:6,
+    padding:"5px 10px", fontWeight:700, cursor:"pointer",
+  },
+
+  // Add exercise section
+  addExWrap: {
+    borderTop:"1px solid #E8E8E8", paddingTop:28, paddingBottom:8,
+  },
+  addExLabel: {
+    fontSize:10, letterSpacing:2.5, textTransform:"uppercase",
+    color:"#aaa", fontWeight:700, marginBottom:12,
+  },
+  addExBtnRow: { display:"flex", gap:10, flexWrap:"wrap" },
+  addExBtn: {
+    flex:1, minWidth:160,
+    display:"flex", flexDirection:"column", alignItems:"flex-start",
+    background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:12, padding:"16px 18px", cursor:"pointer",
+    transition:"all 0.13s", textAlign:"left",
+  },
+  addExBtnTitle: {
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:18, letterSpacing:1.5,
+    color:"#1A1A1A", marginBottom:4,
+  },
+  addExBtnSub: {
+    fontSize:11, color:"#aaa", letterSpacing:0.3, lineHeight:1.4,
+    fontFamily:"'Barlow',sans-serif",
+  },
+
+  // label + clear button on same row
+  labelClearRow: {
+    display:"flex", alignItems:"center",
+    justifyContent:"space-between", marginBottom:0,
+  },
+  clearBtn: {
+    fontSize:10, letterSpacing:2, textTransform:"uppercase",
+    color:"#999", background:"#F0F0F0", border:"1.5px solid #E0E0E0",
+    borderRadius:6, padding:"5px 12px", fontWeight:700, cursor:"pointer",
+    fontFamily:"'Barlow',sans-serif",
+  },
+
+  desc:    { fontSize:13, color:"#888", marginBottom:18, lineHeight:1.6, fontStyle:"italic" },
+  field:   { marginBottom:18 },
+  rowWrap: { display:"flex", gap:20, flexWrap:"wrap", marginBottom:18 },
   label: {
     display:"block", fontSize:10, letterSpacing:2.5,
     textTransform:"uppercase", color:"#aaa", fontWeight:700, marginBottom:8,
@@ -1069,6 +1414,7 @@ const s = {
   bigResult: {
     marginTop:20, padding:"20px", background:"#F8F8F8",
     border:"1.5px solid #E8E8E8", borderRadius:14,
+    textAlign:"center",
   },
   bigResultSub:   { fontSize:11, color:"#bbb", letterSpacing:1, marginBottom:4 },
   bigResultLabel: {
@@ -1175,7 +1521,7 @@ const s = {
     padding:"8px 12px", background:"#EFEFEF",
     borderRadius:8, display:"inline-block", alignSelf:"flex-start",
   },
-  warmupWrap: { marginBottom:12 },
+  warmupWrap:      { marginBottom:12 },
   warmupToggleBtn: {
     background:"transparent", border:"1.5px solid #D0D0D0",
     borderRadius:8, padding:"7px 14px", cursor:"pointer", width:"100%",
@@ -1205,19 +1551,13 @@ const s = {
     fontSize:10, letterSpacing:2, textTransform:"uppercase",
     color:"#888", flexShrink:0, fontWeight:700,
   },
-  warmupWeight: {
-    fontFamily:"'Bebas Neue',sans-serif", fontSize:26,
-    letterSpacing:1, color:"#F0F0F0", flexShrink:0,
-  },
-  warmupUnit:       { fontSize:13, marginLeft:2, color:"#666" },
-  warmupDisclaimer: {
-    fontSize:11, color:"#666", fontStyle:"italic",
-    padding:"8px 16px", borderTop:"1px solid #444",
-  },
+  warmupWeight:    { fontFamily:"'Bebas Neue',sans-serif", fontSize:26, letterSpacing:1, color:"#F0F0F0", flexShrink:0 },
+  warmupUnit:      { fontSize:13, marginLeft:2, color:"#666" },
+  warmupDisclaimer:{ fontSize:11, color:"#666", fontStyle:"italic", padding:"8px 16px", borderTop:"1px solid #444" },
 
-  // ── Limiting Lift ─────────────────────────────────────────────
-  llBlock: { border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden" },
-  llBlockHeader: {
+  // Limiting lift
+  llBlock:      { border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden" },
+  llBlockHeader:{
     fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:4,
     textTransform:"uppercase", color:"#fff", background:"#555", padding:"12px 18px",
   },
@@ -1226,29 +1566,28 @@ const s = {
     padding:"13px 18px", borderBottom:"1px solid #F0F0F0",
     background:"#FAFAFA", gap:12, flexWrap:"wrap",
   },
-  llLiftName:   { display:"flex", alignItems:"center", gap:10, minWidth:160 },
-  llLiftLabel:  { fontSize:15, fontWeight:600, color:"#1A1A1A" },
-  llMotherBadge:{
+  llLiftName:    { display:"flex", alignItems:"center", gap:10, minWidth:160 },
+  llLiftLabel:   { fontSize:15, fontWeight:600, color:"#1A1A1A" },
+  llMotherBadge: {
     fontSize:10, letterSpacing:1.5, textTransform:"uppercase",
     color:"#999", background:"#EFEFEF", padding:"3px 8px",
     borderRadius:4, fontWeight:700,
   },
-  llInputs:     { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
+  llInputs:      { display:"flex", alignItems:"center", gap:8, flexShrink:0 },
   llRepsInput: {
     width:72, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
     borderRadius:8, color:"#1A1A1A", fontSize:20,
     fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
     padding:"8px 6px", textAlign:"center",
   },
-  llTimes:     { fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc" },
+  llTimes:      { fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#ccc" },
   llWeightInput:{
     width:96, background:"#F0F0F0", border:"1.5px solid #E0E0E0",
     borderRadius:8, color:"#1A1A1A", fontSize:20,
     fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1,
     padding:"8px 6px", textAlign:"center",
   },
-  llUnitLabel: { fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:"#bbb", letterSpacing:1 },
-
+  llUnitLabel:  { fontFamily:"'Bebas Neue',sans-serif", fontSize:15, color:"#bbb", letterSpacing:1 },
   llGroup:      { borderBottom:"1px solid #F0F0F0" },
   llGroupHeader:{
     display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -1268,19 +1607,15 @@ const s = {
     background:"#FAFAFA",
     gap:4,
   },
-  llResultHeader: {
-    background:"#F0F0F0", padding:"7px 16px",
-    fontSize:10, letterSpacing:2, textTransform:"uppercase",
-    color:"#aaa", fontWeight:700,
-  },
+  llResultHeader:   { background:"#F0F0F0", padding:"7px 16px", fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#aaa", fontWeight:700 },
   llResultLimiting: { background:"#FFF0F0" },
   llResultMother:   { background:"#F8F8F8" },
-  llColLift:   { fontSize:13, fontWeight:600, color:"#1A1A1A", display:"flex", alignItems:"center", gap:6 },
-  llColE1rm:   { fontSize:15, fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1, color:"#1A1A1A", textAlign:"right" },
-  llColActual: { fontSize:13, fontWeight:600, textAlign:"right" },
-  llColTarget: { fontSize:13, textAlign:"right" },
-  llColGap:    { fontSize:13, fontWeight:700, textAlign:"right" },
-  llSmallUnit: { fontSize:10, color:"#bbb", marginLeft:2, fontFamily:"'Barlow',sans-serif" },
+  llColLift:    { fontSize:13, fontWeight:600, color:"#1A1A1A", display:"flex", alignItems:"center", gap:6 },
+  llColE1rm:    { fontSize:15, fontFamily:"'Bebas Neue',sans-serif", letterSpacing:1, color:"#1A1A1A", textAlign:"right" },
+  llColActual:  { fontSize:13, fontWeight:600, textAlign:"right" },
+  llColTarget:  { fontSize:13, textAlign:"right" },
+  llColGap:     { fontSize:13, fontWeight:700, textAlign:"right" },
+  llSmallUnit:  { fontSize:10, color:"#bbb", marginLeft:2, fontFamily:"'Barlow',sans-serif" },
   llLegend: {
     padding:"12px 16px", fontSize:12, color:"#999",
     background:"#FAFAFA", borderTop:"1px solid #F0F0F0",
@@ -1291,7 +1626,7 @@ const s = {
     borderRadius:10, fontSize:13, color:"#bbb", fontStyle:"italic", lineHeight:1.6,
   },
 
-  // ── Floating email button ─────────────────────────────────────
+  // FAB
   fab: {
     position:"sticky", bottom:28, left:4,
     width:52, height:52,
@@ -1303,18 +1638,15 @@ const s = {
     marginTop:-72, float:"left", clear:"both",
   },
 
-  // ── Email modal ───────────────────────────────────────────────
+  // Modal
   modalOverlay: {
-    position:"fixed", inset:0,
-    background:"rgba(0,0,0,0.4)",
+    position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
     display:"flex", alignItems:"center", justifyContent:"center",
     zIndex:200, padding:20,
   },
   modalBox: {
-    background:"#fff", borderRadius:16,
-    padding:"36px 28px 28px",
-    width:"100%", maxWidth:380,
-    position:"relative",
+    background:"#fff", borderRadius:16, padding:"36px 28px 28px",
+    width:"100%", maxWidth:380, position:"relative",
     boxShadow:"0 8px 40px rgba(0,0,0,0.18)",
     display:"flex", flexDirection:"column", alignItems:"center", gap:12,
   },
@@ -1327,17 +1659,12 @@ const s = {
   modalIcon: {
     width:56, height:56, borderRadius:"50%",
     border:"1.5px solid #E8E8E8",
-    display:"flex", alignItems:"center", justifyContent:"center",
-    marginBottom:4,
+    display:"flex", alignItems:"center", justifyContent:"center", marginBottom:4,
   },
   modalTitle: {
-    fontFamily:"'Bebas Neue',sans-serif",
-    fontSize:24, letterSpacing:2, color:"#1A1A1A", textAlign:"center",
+    fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:2, color:"#1A1A1A", textAlign:"center",
   },
-  modalDesc: {
-    fontSize:13, color:"#999", textAlign:"center",
-    lineHeight:1.6, fontStyle:"italic",
-  },
+  modalDesc:  { fontSize:13, color:"#999", textAlign:"center", lineHeight:1.6, fontStyle:"italic" },
   modalInput: {
     width:"100%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
     borderRadius:10, color:"#1A1A1A", fontSize:15,
@@ -1349,12 +1676,9 @@ const s = {
     border:"none", borderRadius:10, padding:"14px",
     fontSize:13, fontWeight:700, letterSpacing:1,
     textTransform:"uppercase", cursor:"pointer",
-    fontFamily:"'Barlow',sans-serif", marginTop:4,
-    transition:"opacity 0.15s",
+    fontFamily:"'Barlow',sans-serif", marginTop:4, transition:"opacity 0.15s",
   },
-  modalError: {
-    fontSize:12, color:"#C0392B", textAlign:"center",
-  },
+  modalError: { fontSize:12, color:"#C0392B", textAlign:"center" },
 
   footer: {
     textAlign:"center", marginTop:60, fontSize:10,
