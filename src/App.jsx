@@ -724,7 +724,7 @@ function LimitingLiftResults({ results, unit }) {
           <span style={s.llGroupLabel}>{groupLabel}</span>
           {limiting && <span style={s.llLimitingFlag}>Limiting: {limiting.label}</span>}
         </div>
-        <div style={s.llScrollWrap}>
+        <div style={s.llScrollWrap} className="ll-scroll">
           <div style={s.llResultsTable}>
             <div style={{ ...s.llResultRow, ...s.llResultHeader }}>
               <span style={s.llColLift}>Lift</span>
@@ -1211,6 +1211,9 @@ export default function App() {
         input.no-spinner::-webkit-inner-spin-button,
         input.no-spinner::-webkit-outer-spin-button { -webkit-appearance:none; appearance:none; margin:0; }
         input.no-spinner { -moz-appearance:textfield; }
+        .ll-scroll::-webkit-scrollbar { height:4px; }
+        .ll-scroll::-webkit-scrollbar-track { background:#F0F0F0; }
+        .ll-scroll::-webkit-scrollbar-thumb { background:#ccc; border-radius:2px; }
       `}</style>
 
       <script>{`
@@ -1577,7 +1580,7 @@ const s = {
   warmupDisclaimer:{ fontSize:11, color:"#666", fontStyle:"italic", padding:"8px 16px", borderTop:"1px solid #444" },
 
   // Limiting lift
-  llBlock:      { border:"1.5px solid #E8E8E8", borderRadius:12, overflow:"hidden" },
+  llBlock:      { border:"1.5px solid #E8E8E8", borderRadius:12 },
   llBlockHeader:{
     fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:4,
     textTransform:"uppercase", color:"#fff", background:"#555", padding:"12px 18px",
@@ -1619,10 +1622,12 @@ const s = {
   },
   llLimitingFlag: { fontSize:12, fontWeight:700, color:"#FFD580", letterSpacing:0.3 },
   llScrollWrap: {
-    overflowX:"auto",
+    overflowX:"scroll",
+    overflowY:"visible",
     WebkitOverflowScrolling:"touch",
+    msOverflowStyle:"-ms-autohiding-scrollbar",
   },
-  llResultsTable: { minWidth:460 },
+  llResultsTable: { minWidth:460, width:"max-content" },
   llResultRow: {
     display:"grid",
     gridTemplateColumns:"140px 90px 74px 74px 68px",
