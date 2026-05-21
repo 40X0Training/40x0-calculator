@@ -208,7 +208,11 @@ export default async function handler(req, res) {
   <!-- HEADER -->
   <tr><td style="background:#1A1A1A;padding:36px 40px 28px;">
     <div style="font-size:10px;letter-spacing:5px;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:10px;">40X0 TRAINING</div>
-    <div style="font-size:48px;line-height:0.9;letter-spacing:2px;color:#fff;font-weight:900;text-transform:uppercase;margin-bottom:14px;">YOUR TRAINING<br/>RESULTS</div>
+    <div style="font-size:48px;line-height:0.9;letter-spacing:2px;color:#fff;font-weight:900;text-transform:uppercase;margin-bottom:14px;">
+      ${data.clientName
+        ? `${data.clientName},<br/>here are your loading<br/>plans &amp; results`
+        : `Your loading plans<br/>&amp; training results`}
+    </div>
     <div style="font-size:11px;letter-spacing:2px;color:#555;text-transform:uppercase;font-weight:600;">ES1RM · Target Rep Max · Step Load · Phase Plan</div>
   </td></tr>
 

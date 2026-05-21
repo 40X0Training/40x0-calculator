@@ -129,6 +129,7 @@ const COL = { set:46, reps:72, weight:120 };
 function makeExercise(overrides = {}) {
   return {
     id:           Date.now() + Math.random(),
+    unit:         "lbs",
     weight:       "",
     topReps:      "",
     exercise:     "",
@@ -452,7 +453,7 @@ function ExercisePanel({ ex, unit, onChange, isOnly }) {
           <div style={s.field}>
             <label style={s.label}>Unit</label>
             <Toggle
-              value={unit} onChange={() => {}}
+              value={unit} onChange={v => update("unit", v)}
               options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
             />
           </div>
@@ -855,10 +856,9 @@ function EmailModal({ onClose, emailData }) {
 const EMPTY_LIFT = { reps: "", weight: "" };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("planner");
-  const [showModal, setShowModal] = useState(false);
-  const [unit,      setUnit]      = useState("lbs");
-
+  const [activeTab,   setActiveTab]   = useState("planner");
+  const [showModal,   setShowModal]   = useState(false);
+  const [clientName,  setClientName]  = useState("");
   // Multi-exercise list
   const [exercises,      setExercises]      = useState([makeExercise()]);
   const [activeExIndex,  setActiveExIndex]  = useState(0);
@@ -897,12 +897,14 @@ export default function App() {
     const current = exercises[activeExIndex];
     collapseExercise(activeExIndex);
     const newEx = makeExercise(keepPrescription ? {
+      unit:         current.unit,
       micro:        current.micro,
       mode:         current.mode,
       targetReps:   current.targetReps,
       targetSets:   current.targetSets,
       complexSlots: [...current.complexSlots],
     } : {
+      unit:  current.unit,
       micro: current.micro,
     });
     setExercises(prev => [...prev, newEx]);
@@ -940,7 +942,7 @@ export default function App() {
         exercise:   exLabel,
         weight:     w || null,
         topReps:    r || null,
-        unit,
+        unit:       ex.unit,
         micro:      ex.micro,
         e1rm:       e1rmDisplay,
         esRepMax:   esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null,
@@ -962,6 +964,7 @@ export default function App() {
     );
     const hasAnyLL = (llParsed["bench"] || llParsed["squat"]);
     return {
+      clientName: clientName.trim() || null,
       exercises: exerciseResults,
       llResults: hasAnyLL ? calcLimitingLifts(llParsed) : [],
     };
@@ -1036,12 +1039,15 @@ export default function App() {
         {/* ══ TAB 1: PLANNER ══ */}
         {activeTab === "planner" && (
           <>
-            {/* Unit selector — shared across all exercises */}
-            <div style={s.globalUnitRow}>
-              <span style={s.globalUnitLabel}>Unit</span>
-              <Toggle
-                value={unit} onChange={setUnit}
-                options={[{ value:"lbs", label:"lbs" }, { value:"kg", label:"kg" }]}
+            {/* Client name input */}
+            <div style={s.clientNameRow}>
+              <label style={s.label}>Client Name <span style={s.hint}>(optional)</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Bryan"
+                value={clientName}
+                onChange={e => setClientName(e.target.value)}
+                style={s.clientNameInput}
               />
             </div>
 
@@ -1053,7 +1059,7 @@ export default function App() {
                   key={ex.id}
                   ex={ex}
                   index={realIdx}
-                  unit={unit}
+                  unit={ex.unit}
                   onExpand={() => expandExercise(realIdx)}
                   onRemove={() => removeExercise(realIdx)}
                 />
@@ -1080,7 +1086,7 @@ export default function App() {
                   )}
                   <ExercisePanel
                     ex={ex}
-                    unit={unit}
+                    unit={ex.unit}
                     onChange={updated => updateExercise(idx, updated)}
                     isOnly={exercises.length === 1}
                   />
@@ -1204,6 +1210,17 @@ export default function App() {
         input.no-spinner::-webkit-outer-spin-button { -webkit-appearance:none; appearance:none; margin:0; }
         input.no-spinner { -moz-appearance:textfield; }
       `}</style>
+
+      <script>{`
+        (function() {
+          function sendHeight() {
+            window.parent.postMessage({ iframeHeight: document.body.scrollHeight }, '*');
+          }
+          const observer = new ResizeObserver(sendHeight);
+          observer.observe(document.body);
+          sendHeight();
+        })();
+      `}</script>
     </div>
   );
 }
@@ -1236,14 +1253,16 @@ const s = {
   },
   tabBtnOn: { background:"#1A1A1A", color:"#fff", borderRight:"1px solid #1A1A1A" },
 
-  // Global unit row
-  globalUnitRow: {
-    display:"flex", alignItems:"center", gap:14,
-    paddingTop:20, paddingBottom:4,
+  // Client name row
+  clientNameRow: {
+    paddingTop:24, paddingBottom:4,
+    borderBottom:"1px solid #E8E8E8",
+    marginBottom:0,
   },
-  globalUnitLabel: {
-    fontSize:10, letterSpacing:2.5, textTransform:"uppercase",
-    color:"#aaa", fontWeight:700,
+  clientNameInput: {
+    width:"50%", background:"#F8F8F8", border:"1.5px solid #E0E0E0",
+    borderRadius:10, color:"#1A1A1A", fontSize:15,
+    padding:"12px 14px", fontFamily:"'Barlow',sans-serif",
   },
 
   // Section styles (for Limiting Lift tab)
