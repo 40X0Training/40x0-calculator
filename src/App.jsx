@@ -724,48 +724,50 @@ function LimitingLiftResults({ results, unit }) {
           <span style={s.llGroupLabel}>{groupLabel}</span>
           {limiting && <span style={s.llLimitingFlag}>Limiting: {limiting.label}</span>}
         </div>
-        <div style={s.llResultsTable}>
-          <div style={{ ...s.llResultRow, ...s.llResultHeader }}>
-            <span style={s.llColLift}>Lift</span>
-            <span style={s.llColE1rm}>ES1RM</span>
-            <span style={s.llColActual}>Actual</span>
-            <span style={s.llColTarget}>Target</span>
-            <span style={s.llColGap}>Gap</span>
+        <div style={s.llScrollWrap}>
+          <div style={s.llResultsTable}>
+            <div style={{ ...s.llResultRow, ...s.llResultHeader }}>
+              <span style={s.llColLift}>Lift</span>
+              <span style={s.llColE1rm}>ES1RM</span>
+              <span style={s.llColActual}>Actual</span>
+              <span style={s.llColTarget}>Target</span>
+              <span style={s.llColGap}>Gap</span>
+            </div>
+            {lifts.map(lift => {
+              if (lift.e1rm === null) return null;
+              const isMother   = lift.motherKey === null;
+              const isLimiting = !!lift.isLimiting;
+              const gap        = lift.gap;
+              const gapColor   = isMother ? "#bbb"
+                : gap === null ? "#bbb"
+                : gap >= 0     ? "#4CAF50"
+                : gap > -0.05  ? "#FF9800"
+                : "#C0392B";
+              return (
+                <div key={lift.key} style={{
+                  ...s.llResultRow,
+                  ...(isLimiting ? s.llResultLimiting : {}),
+                  ...(isMother   ? s.llResultMother   : {}),
+                }}>
+                  <span style={{...s.llColLift, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
+                    {lift.label}
+                  </span>
+                  <span style={{...s.llColE1rm, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
+                    {fmt(roundHalf(lift.e1rm))}<span style={s.llSmallUnit}>{unit}</span>
+                  </span>
+                  <span style={{ ...s.llColActual, color: isMother ? "#bbb" : isLimiting ? "#C0392B" : "#1A1A1A" }}>
+                    {isMother ? "—" : fmtRatioPct(lift.actualRatio)}
+                  </span>
+                  <span style={{ ...s.llColTarget, color: isLimiting ? "#C0392B" : "#bbb" }}>
+                    {isMother ? "—" : fmtRatioPct(lift.targetRatio)}
+                  </span>
+                  <span style={{ ...s.llColGap, color: gapColor }}>
+                    {isMother ? "—" : fmtGap(gap)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          {lifts.map(lift => {
-            if (lift.e1rm === null) return null;
-            const isMother   = lift.motherKey === null;
-            const isLimiting = !!lift.isLimiting;
-            const gap        = lift.gap;
-            const gapColor   = isMother ? "#bbb"
-              : gap === null ? "#bbb"
-              : gap >= 0     ? "#4CAF50"
-              : gap > -0.05  ? "#FF9800"
-              : "#C0392B";
-            return (
-              <div key={lift.key} style={{
-                ...s.llResultRow,
-                ...(isLimiting ? s.llResultLimiting : {}),
-                ...(isMother   ? s.llResultMother   : {}),
-              }}>
-                <span style={{...s.llColLift, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
-                  {lift.label}
-                </span>
-                <span style={{...s.llColE1rm, color: isLimiting ? "#C0392B" : "#1A1A1A"}}>
-                  {fmt(roundHalf(lift.e1rm))}<span style={s.llSmallUnit}>{unit}</span>
-                </span>
-                <span style={{ ...s.llColActual, color: isMother ? "#bbb" : isLimiting ? "#C0392B" : "#1A1A1A" }}>
-                  {isMother ? "—" : fmtRatioPct(lift.actualRatio)}
-                </span>
-                <span style={{ ...s.llColTarget, color: isLimiting ? "#C0392B" : "#bbb" }}>
-                  {isMother ? "—" : fmtRatioPct(lift.targetRatio)}
-                </span>
-                <span style={{ ...s.llColGap, color: gapColor }}>
-                  {isMother ? "—" : fmtGap(gap)}
-                </span>
-              </div>
-            );
-          })}
         </div>
       </div>
     );
@@ -1616,17 +1618,21 @@ const s = {
     fontSize:11, letterSpacing:3, textTransform:"uppercase", fontWeight:700, color:"#fff",
   },
   llLimitingFlag: { fontSize:12, fontWeight:700, color:"#FFD580", letterSpacing:0.3 },
-  llResultsTable: {},
+  llScrollWrap: {
+    overflowX:"auto",
+    WebkitOverflowScrolling:"touch",
+  },
+  llResultsTable: { minWidth:460 },
   llResultRow: {
     display:"grid",
-    gridTemplateColumns:"1fr 90px 72px 72px 68px",
+    gridTemplateColumns:"140px 90px 74px 74px 68px",
     alignItems:"center",
     padding:"11px 16px",
     borderBottom:"1px solid #F5F5F5",
     background:"#FAFAFA",
-    gap:4,
+    gap:0,
   },
-  llResultHeader:   { background:"#F0F0F0", padding:"7px 16px", fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#aaa", fontWeight:700 },
+  llResultHeader:   { background:"#F0F0F0", fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#aaa", fontWeight:700 },
   llResultLimiting: { background:"#FFF0F0" },
   llResultMother:   { background:"#F8F8F8" },
   llColLift:    { fontSize:13, fontWeight:600, color:"#1A1A1A", display:"flex", alignItems:"center", gap:6 },
