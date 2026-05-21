@@ -15,8 +15,8 @@ const STEP_PCT = {
 
 const PHASE = [
   { week:1, label:"Week 1", defaultPct:-0.05,  tag:"Building In"  },
-  { week:2, label:"Week 2", defaultPct:+0.025, tag:"Coordinating" },
-  { week:3, label:"Week 3", defaultPct:+0.05,  tag:"Expressing"   },
+  { week:2, label:"Week 2", defaultPct:0,       tag:"Coordinating" },
+  { week:3, label:"Week 3", defaultPct:+0.025, tag:"Expressing"   },
 ];
 
 const PRESETS = [
