@@ -940,19 +940,33 @@ export default function App() {
           ladder:  (topSetRaw && hasSets) ? buildLadder(topSetRaw, ts, ex.micro) : [],
         };
       });
+      // Complex sets for email
+      const complexRepsEmail = parseComplex(ex.complexSlots);
+      const complexWeeks = ex.mode === "complex" && complexRepsEmail.length > 0 && e1rmRaw
+        ? PHASE.map(ph => ({
+            label:       ph.label,
+            tag:         ph.tag,
+            complexSets: complexRepsEmail.map(rep => ({
+              repCount: rep,
+              weight:   roundStep(calcRepMax(e1rmRaw, rep) * (1 + ph.defaultPct), ex.micro),
+            })),
+          }))
+        : [];
+
       return {
-        exercise:   exLabel,
-        weight:     w || null,
-        topReps:    r || null,
-        unit:       ex.unit,
-        micro:      ex.micro,
-        e1rm:       e1rmDisplay,
-        esRepMax:   esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null,
-        targetReps: tr || null,
-        targetSets: ts || null,
-        mode:       ex.mode,
+        exercise:     exLabel,
+        weight:       w || null,
+        topReps:      r || null,
+        unit:         ex.unit,
+        micro:        ex.micro,
+        e1rm:         e1rmDisplay,
+        esRepMax:     esRepMaxRaw ? roundDisplay(esRepMaxRaw) : null,
+        targetReps:   tr || null,
+        targetSets:   ts || null,
+        mode:         ex.mode,
         ladder,
-        weeks:      ex.mode === "standard" ? weeks : [],
+        weeks:        ex.mode === "standard" ? weeks : [],
+        complexWeeks: ex.mode === "complex"  ? complexWeeks : [],
       };
     });
 

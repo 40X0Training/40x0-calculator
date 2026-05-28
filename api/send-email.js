@@ -81,13 +81,47 @@ export default async function handler(req, res) {
     </table>`;
   };
 
+  // ── Complex week card ────────────────────────────────────────────
+  const complexWeekCard = (week, unit) => `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;border:1.5px solid #E8E8E8;border-radius:8px;overflow:hidden;">
+      <col width="70"/><col width="80"/><col/><col width="80"/>
+      <tr><td colspan="4" style="padding:0;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="padding:14px 16px;background:#F5F5F5;">
+            <div style="font-size:22px;font-weight:900;color:#1A1A1A;text-transform:uppercase;letter-spacing:1px;">${week.label}</div>
+            <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#bbb;font-weight:700;margin-top:3px;">${week.tag}</div>
+          </td>
+        </tr></table>
+      </td></tr>
+      ${week.complexSets.map((set, i) => {
+        const isTop = i === week.complexSets.length - 1;
+        const isBot = i === 0;
+        const bg       = isTop ? '#1A1A1A' : isBot ? '#F0F0F0' : '#FAFAFA';
+        const setColor = isTop ? '#aaa' : '#bbb';
+        const repColor = isTop ? '#888' : '#bbb';
+        const wColor   = isTop ? '#fff'  : '#1A1A1A';
+        const uColor   = isTop ? '#666'  : '#bbb';
+        const tagBg    = isTop ? '#333'  : '#E0E0E0';
+        const tagColor = isTop ? '#888'  : '#999';
+        const tag      = `ES${set.repCount}RM`;
+        return `
+        <tr style="background:${bg};">
+          <td style="padding:13px 16px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:${setColor};font-weight:700;">SET ${i + 1}</td>
+          <td style="padding:13px 8px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:${repColor};font-weight:700;">${set.repCount} REPS</td>
+          <td style="padding:13px 8px;font-size:22px;font-weight:900;color:${wColor};">${fmt(set.weight)}<span style="font-size:12px;color:${uColor};margin-left:3px;font-weight:400;">${unit}</span></td>
+          <td style="padding:13px 16px;text-align:right;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:${tagColor};background:${tagBg};font-weight:700;">${tag}</td>
+        </tr>`;
+      }).join('')}
+    </table>`;
+
   // ── Single exercise block ────────────────────────────────────────
   const exerciseBlock = (ex, index, total) => {
-    const unit       = ex.unit || data.unit || 'lbs';
-    const exLabel    = ex.exercise || null;
-    const hasLadder  = ex.ladder && ex.ladder.length > 0;
-    const hasPhase   = ex.weeks && ex.weeks.length > 0 && ex.weeks.some(w => w.ladder && w.ladder.length > 0);
-    const headerNum  = total > 1 ? `EXERCISE ${index + 1}` : null;
+    const unit         = ex.unit || data.unit || 'lbs';
+    const exLabel      = ex.exercise || null;
+    const hasLadder    = ex.ladder && ex.ladder.length > 0;
+    const hasPhase     = ex.weeks && ex.weeks.length > 0 && ex.weeks.some(w => w.ladder && w.ladder.length > 0);
+    const hasComplex   = ex.complexWeeks && ex.complexWeeks.length > 0 && ex.complexWeeks.some(w => w.complexSets && w.complexSets.length > 0);
+    const headerNum    = total > 1 ? `EXERCISE ${index + 1}` : null;
 
     return `
     ${headerNum ? `
@@ -126,6 +160,12 @@ export default async function handler(req, res) {
     <tr><td style="background:#fff;padding:24px 40px;border-bottom:2px solid #EFEFEF;">
       <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#bbb;font-weight:700;margin-bottom:16px;">3-Week Phase Plan</div>
       ${ex.weeks.map(w => weekCard(w, unit)).join('')}
+    </td></tr>` : ''}
+
+    ${hasComplex ? `
+    <tr><td style="background:#fff;padding:24px 40px;border-bottom:2px solid #EFEFEF;">
+      <div style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#bbb;font-weight:700;margin-bottom:16px;">3-Week Phase Plan — Complex Scheme</div>
+      ${ex.complexWeeks.map(w => complexWeekCard(w, unit)).join('')}
     </td></tr>` : ''}`;
   };
 
