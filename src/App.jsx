@@ -1196,7 +1196,8 @@ html,body{background:var(--bg)!important;margin:0}
 .app button{font-family:var(--body);cursor:pointer}
 .app button:disabled{opacity:.45;cursor:default}
 .app button:focus-visible,.app input:focus-visible{outline:2px solid var(--bone);outline-offset:2px}
-.app input{font-family:var(--body);margin:0}
+.app input{font-family:var(--body)}
+:where(.app input){margin:0}
 .wrap{max-width:720px;margin:0 auto;padding:28px 20px 130px}
 .lab{display:block;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:8px}
 .lab small{text-transform:none;letter-spacing:.5px;color:var(--faint);font-weight:400;font-size:11px}
